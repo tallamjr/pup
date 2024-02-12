@@ -1,14 +1,12 @@
 # `pup` 🦭
 
-[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pup.svg)](https://pypi.org/project/pup)
-
 -----
 
 **Table of Contents**
 
 - [About](#about)
 - [Usage](#usage)
-- [Installation](#installation)
+<!-- - [Installation](#installation) -->
 - [License](#license)
 
 # About
@@ -57,14 +55,16 @@ cargo run --release -- --video assets/sample.mp4
 
 <!-- _Note, the first time this is run it will need to download the model weights from huggingface_ -->
 
-This will fire up a window like th
+This will fire up a window like and annotate objects in each frame like so:
+
+![Alt Text](assets/output.gif)
 
 
-## Installation
+<!-- ## Installation -->
 
-```console
-pip install pup
-```
+<!-- ```console -->
+<!-- pip install pup -->
+<!-- ``` -->
 
 ## License
 

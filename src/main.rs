@@ -490,6 +490,9 @@ pub fn run<T: Task>(args: Args) -> anyhow::Result<()> {
                 args.legend_size,
             )?;
 
+            let image_t_name = format!("assets/frame_{frame_count:03}.jpg");
+            image_t.save(image_t_name)?;
+
             frame = dynamic_image_to_mat(image_t)?;
 
             let mut bgr_img_mat = Mat::default();
