@@ -6,7 +6,7 @@
 
 - [About](#about)
 - [Usage](#usage)
-<!-- - [Installation](#installation) -->
+- [Memory Footprint](#memory)
 - [License](#license)
 
 # About
@@ -35,8 +35,6 @@ rust has several advantages in this context:
    as a statically typed, memory safe, language gives the programmer the power
    to develop with confidence of how memory is being used.
 
-3. ...
-
 ### _What?_
 
 What's going on here then? This repo -- at the time of press -- uses the
@@ -59,6 +57,50 @@ This will fire up a window like and annotate objects in each frame like so:
 
 ![Alt Text](assets/output.gif)
 
+## Memory Footprint
+
+With current optimization settings, i.e. using `--release` flag will set
+`opt-level` to 3, for better speed. We could optimise for small binary size, but
+performance will be slower. See the [Cargo Book](https://doc.rust-lang.org/cargo/reference/profiles.html) or https://github.com/johnthagen/min-sized-rust for details on making the resulting binary smaller or faster. As it stands, the resulting binary is ~ 5Mb
+
+```bash
+$ du -sh target/release/pup
+5.7M    pup
+```
+
+To investigate the runtime memory footprint we can use `leaks` utility on macOS.
+
+```bash
+$ leaks --atExit -- ./target/release/pup --video assets/sample.mp4
+
+Process:         pup [24864]
+Path:            /Users/USER/*/pup
+Load Address:    0x104744000
+Identifier:      pup
+Version:         0
+Code Type:       ARM64
+Platform:        macOS
+Parent Process:  leaks [24863]
+
+Date/Time:       2024-02-12 21:25:46.568 +0000
+Launch Time:     2024-02-12 21:25:29.754 +0000
+OS Version:      macOS 13.4 (22F66)
+Report Version:  7
+Analysis Tool:   /Applications/Xcode.app/Contents/Developer/usr/bin/leaks
+Analysis Tool Version:  Xcode 14.3.1 (14E300c)
+
+Physical footprint:         95.9M
+Physical footprint (peak):  687.3M
+Idle exit:                  untracked
+----
+
+leaks Report Version: 4.0, multi-line stacks
+Process 24864: 19369 nodes malloced for 34590 KB
+Process 24864: 0 leaks for 0 total leaked bytes.
+```
+
+This gives an average memory usage of ~100Mb and total peak memory usage of
+~690Mb.
 
 <!-- ## Installation -->
 
