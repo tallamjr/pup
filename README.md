@@ -7,6 +7,7 @@
 - [About](#about)
 - [Usage](#usage)
 - [Memory Footprint](#memory)
+- [Cross-compiling](#cross)
 - [License](#license)
 
 # About
@@ -61,7 +62,10 @@ This will fire up a window like and annotate objects in each frame like so:
 
 With current optimization settings, i.e. using `--release` flag will set
 `opt-level` to 3, for better speed. We could optimise for small binary size, but
-performance will be slower. See the [Cargo Book](https://doc.rust-lang.org/cargo/reference/profiles.html) or https://github.com/johnthagen/min-sized-rust for details on making the resulting binary smaller or faster. As it stands, the resulting binary is ~ 5Mb
+performance will be slower. See the [Cargo
+Book](https://doc.rust-lang.org/cargo/reference/profiles.html) or
+https://github.com/johnthagen/min-sized-rust for details on making the resulting
+binary smaller or faster. As it stands, the resulting binary is ~ 5Mb
 
 ```bash
 $ du -sh target/release/pup
@@ -102,11 +106,41 @@ Process 24864: 0 leaks for 0 total leaked bytes.
 This gives an average memory usage of ~100Mb and total peak memory usage of
 ~690Mb.
 
-<!-- ## Installation -->
+Note, chatgpt summary of Peak Physical vs. Physical:
+> The terms "physical memory footprint" and "peak physical memory footprint" both
+> relate to the amount of physical memory (RAM) used by a process or application, but they capture different aspects of memory usage:
+>
+> 1. **Physical Memory Footprint:**
+>   - The physical memory footprint generally refers to the amount of RAM that a process or application is actively using at a specific point in time or on average during its execution.  - It represents the current or average memory consumption and is not necessarily the maximum amount of memory used throughout the entire runtime of the process.
+>
+> 2. **Peak Physical Memory Footprint:**
+>  - The peak physical memory footprint specifically refers to the maximum amount of RAM that a process or application has used during its entire execution.  - It represents the highest point of memory consumption reached by the process or application.
 
-<!-- ```console -->
-<!-- pip install pup -->
-<!-- ``` -->
+> In summary, the physical memory footprint gives you an idea of the current or average memory usage, while the peak physical memory footprint highlights the maximum memory usage observed over the entire lifetime of the process or application. Monitoring both metrics is important for understanding how an application utilizes memory resources and for optimizing performance and resource management.
+
+## Cross-compiling
+
+One of the most attractive things about using rust is the tools that are
+available to cross-compile to various hardware. Currently `pup` has been
+developed using an arm64 macOS system.
+
+```bash
+$ file target/release/pup
+
+target/release/pup: Mach-O 64-bit executable arm64
+```
+
+If we want to instead have an ELF or runnable binary, this can easily done using
+cargo and including the right tools in `.cargo/config.toml`:
+
+That said, it is notoriously fiddly to cross compile going from macOS --> Linux.
+It is advisable to read over https://github.com/japaric/rust-cross or look into
+docker based tools such as https://github.com/cross-rs/cross or
+https://github.com/rust-cross/rust-musl-cross
+
+#### Refs
+
+- https://doc.rust-lang.org/rustc/platform-support.html
 
 ## License
 
