@@ -52,9 +52,34 @@ cargo run --release -- --video assets/sample.mp4
 
 <!-- _Note, the first time this is run it will need to download the model weights from huggingface_ -->
 
-This will fire up a window like and annotate objects in each frame like so:
+This will fire up a window like below and annotate objects in each frame:
 
 ![Alt Text](assets/output.gif)
+
+Information about the location of the boxes and the identified objects will be
+sent to stdout...
+
+```bash
+...
+Processing frame 160
+generated predictions Tensor[dims 84, 4620; f32]
+person: Bbox { xmin: 25.402996, ymin: 281.722, xmax: 37.93538, ymax: 305.6891, confidence: 0.5820799, data: [] }
+person: Bbox { xmin: 6.352282, ymin: 284.7604, xmax: 13.664183, ymax: 306.18918, confidence: 0.41667968, data: [] }
+car: Bbox { xmin: 33.109806, ymin: 284.62817, xmax: 109.44653, ymax: 320.54688, confidence: 0.8652527, data: [] }
+truck: Bbox { xmin: 150.58142, ymin: 265.03888, xmax: 198.64215, ymax: 297.8924, confidence: 0.63634956, data: [] }
+Processing frame 165
+generated predictions Tensor[dims 84, 4620; f32]
+person: Bbox { xmin: 29.655272, ymin: 281.85794, xmax: 39.016144, ymax: 299.11453, confidence: 0.56209296, data: [] }
+car: Bbox { xmin: 20.964737, ymin: 286.7253, xmax: 101.58455, ymax: 324.42282, confidence: 0.84946674, data: [] }
+truck: Bbox { xmin: 148.0414, ymin: 266.43268, xmax: 194.61363, ymax: 298.94403, confidence: 0.4919662, data: [] }
+traffic light: Bbox { xmin: 35.862103, ymin: 219.83334, xmax: 45.31969, ymax: 249.05392, confidence: 0.44971594, data: [] }
+Processing frame 170
+generated predictions Tensor[dims 84, 4620; f32]
+car: Bbox { xmin: 4.899437, ymin: 286.60254, xmax: 92.49835, ymax: 326.64014, confidence: 0.8659615, data: [] }
+truck: Bbox { xmin: 144.10123, ymin: 265.35748, xmax: 191.16196, ymax: 298.9926, confidence: 0.6999927, data: [] }
+traffic light: Bbox { xmin: 35.988472, ymin: 219.34744, xmax: 45.318306, ymax: 248.43362, confidence: 0.42890158, data: [] }
+...
+```
 
 ## Memory Footprint
 
