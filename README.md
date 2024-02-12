@@ -170,6 +170,10 @@ https://github.com/rust-cross/rust-musl-cross
 - [How to create Mat from image loaded from Web](https://github.com/twistedfall/opencv-rust/issues/358#issuecomment-1209076962)
 - https://doc.rust-lang.org/cargo/index.html
 - [Optimize for size](https://docs.rust-embedded.org/book/unsorted/speed-vs-size.html)
+- [Viewing Virtual Memory Usage](https://developer.apple.com/library/archive/documentation/Performance/Conceptual/ManagingMemory/Articles/VMPages.html#//apple_ref/doc/uid/20001985-CJBJFIDD)
+- [Memgraph, detection of memory issues](https://blogs.halodoc.io/memgraph-detection-of-memory-issues-on-ios/)
+- https://github.com/ToluClassics/candle-tutorial
+- [Implementing YOLOv8 Object Detection with OpenCV in Rust Using ONNX Models](https://linzichun.com/posts/rust-opencv-onnx-yolov8-detect/)
 
 ## License
 
