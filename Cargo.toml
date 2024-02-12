@@ -23,3 +23,4 @@ tracing-subscriber = "0.3.7"
 rusttype = "0.9.3"
 opencv = "0.88.8"
 mat2image = { git = "https://github.com/rcastill/mat2image.git" }
+openssl = { version = "0.10", features = ["vendored"] }

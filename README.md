@@ -1,7 +1,5 @@
 # `pup` 🦭
 
------
-
 **Table of Contents**
 
 - [About](#about)
@@ -106,7 +104,7 @@ Process 24864: 0 leaks for 0 total leaked bytes.
 This gives an average memory usage of ~100Mb and total peak memory usage of
 ~690Mb.
 
-Note, chatgpt summary of Peak Physical vs. Physical:
+_Chatgpt summary of Peak Physical vs. Physical:_
 > The terms "physical memory footprint" and "peak physical memory footprint" both
 > relate to the amount of physical memory (RAM) used by a process or application, but they capture different aspects of memory usage:
 >
@@ -115,10 +113,9 @@ Note, chatgpt summary of Peak Physical vs. Physical:
 >
 > 2. **Peak Physical Memory Footprint:**
 >  - The peak physical memory footprint specifically refers to the maximum amount of RAM that a process or application has used during its entire execution.  - It represents the highest point of memory consumption reached by the process or application.
-
 > In summary, the physical memory footprint gives you an idea of the current or average memory usage, while the peak physical memory footprint highlights the maximum memory usage observed over the entire lifetime of the process or application. Monitoring both metrics is important for understanding how an application utilizes memory resources and for optimizing performance and resource management.
 
-## Cross-compiling
+## Cross-compiling (wip) 🚧
 
 One of the most attractive things about using rust is the tools that are
 available to cross-compile to various hardware. Currently `pup` has been
@@ -138,9 +135,16 @@ It is advisable to read over https://github.com/japaric/rust-cross or look into
 docker based tools such as https://github.com/cross-rs/cross or
 https://github.com/rust-cross/rust-musl-cross
 
-#### Refs
+`opencv` cross compilation complications 👇
+- https://github.com/twistedfall/opencv-rust/blob/master/INSTALL.md#crosscompilation
+
+## Refs
 
 - https://doc.rust-lang.org/rustc/platform-support.html
+- [How do I get a vector of u8 RGB values when using the image crate?](https://stackoverflow.com/a/50821290/4521950)
+- [How to create Mat from image loaded from Web](https://github.com/twistedfall/opencv-rust/issues/358#issuecomment-1209076962)
+- https://doc.rust-lang.org/cargo/index.html
+- [Optimize for size](https://docs.rust-embedded.org/book/unsorted/speed-vs-size.html)
 
 ## License
 
