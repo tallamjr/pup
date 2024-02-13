@@ -1,9 +1,10 @@
 name: build and release
 
-# on:
-#   workflow_dispatch:
-#   release:
-#     types: [ created ]
+on:
+  - push:
+    - branches: [ "master" ]
+  - pull_request:
+    - branches: [ "master" ]
 
 permissions:
   contents: write
