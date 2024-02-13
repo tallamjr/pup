@@ -140,6 +140,40 @@ _Chatgpt summary of Peak Physical vs. Physical:_
 >  - The peak physical memory footprint specifically refers to the maximum amount of RAM that a process or application has used during its entire execution.  - It represents the highest point of memory consumption reached by the process or application.
 > In summary, the physical memory footprint gives you an idea of the current or average memory usage, while the peak physical memory footprint highlights the maximum memory usage observed over the entire lifetime of the process or application. Monitoring both metrics is important for understanding how an application utilizes memory resources and for optimizing performance and resource management.
 
+As an aside, here is a snippet of the python example (note, they are not the
+same program and this is only show as an illustration)
+
+```bash
+Process:         python3.11 [27749]
+Path:            /Users/USER/*/python
+Load Address:    0x10076c000
+Identifier:      python3.11
+Version:         0
+Code Type:       ARM64
+Platform:        macOS
+Parent Process:  leaks [27733]
+
+Date/Time:       2024-02-13 08:32:14.002 +0000
+Launch Time:     2024-02-13 08:31:57.184 +0000
+OS Version:      macOS 13.4 (22F66)
+Report Version:  7
+Analysis Tool:   /Applications/Xcode.app/Contents/Developer/usr/bin/leaks
+Analysis Tool Version:  Xcode 14.3.1 (14E300c)
+
+Physical footprint:         334.4M
+Physical footprint (peak):  428.9M
+Idle exit:                  untracked
+----
+
+leaks Report Version: 4.0, multi-line stacks
+Process 27749: 116011 nodes malloced for 38107 KB
+Process 27749: 9 leaks for 496 total leaked bytes.
+
+STACK OF 3 INSTANCES OF 'ROOT LEAK: <NSMutableDictionary>':
+```
+
+Note the memory leaks 😬, albeit tiny ..
+
 ## Cross-compiling (wip) 🚧
 
 One of the most attractive things about using rust is the tools that are
