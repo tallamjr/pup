@@ -52,6 +52,8 @@ To run the simple example, run:
 cargo run --release -- --video assets/sample.mp4
 ```
 
+> ❕ This assumes rust is install on the host system. If not one can run: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+
 <!-- _Note, the first time this is run it will need to download the model weights from huggingface_ -->
 
 This will fire up a window like below and annotate objects in each frame:
