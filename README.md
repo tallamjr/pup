@@ -1,5 +1,7 @@
 # `pup` 🦭
 
+![ci](https://github.com/tallamjr/pup/actions/workflows/rust.yml/badge.svg)
+
 **Table of Contents**
 
 - [About](#about)
