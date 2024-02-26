@@ -8,15 +8,19 @@
 - [Usage](#usage)
 - [Memory Footprint](#memory)
 - [Cross-compiling](#cross)
+- [ONNX Runtimes](#onnx)
 - [License](#license)
 
 # About
 
-`pup` is a small proof-of-concept codebase for running ML models on video data
-using rust.
+`pup` is a small playground/proof-of-concept codebase for running ML models on
+video data using rust.
 
 The main libraries are `opencv` for video processing and `candle` as the deep
 learning framework.
+
+It also explores the workflow of using pre-compiled model files using onnx and
+tflite and then rust libraries for inference.
 
 ### _Why?_
 
@@ -201,6 +205,13 @@ https://github.com/rust-cross/rust-musl-cross
 `opencv` cross compilation complications 👇
 - https://github.com/twistedfall/opencv-rust/blob/master/INSTALL.md#crosscompilation
 
+
+## ONNX Runtimes (wip) 🚧
+
+- https://onnxruntime.ai/docs/build/
+- https://ort.pyke.io/introduction
+- https://onnxruntime.ai/
+
 ## Refs
 
 - https://doc.rust-lang.org/rustc/platform-support.html
@@ -212,6 +223,7 @@ https://github.com/rust-cross/rust-musl-cross
 - [Memgraph, detection of memory issues](https://blogs.halodoc.io/memgraph-detection-of-memory-issues-on-ios/)
 - https://github.com/ToluClassics/candle-tutorial
 - [Implementing YOLOv8 Object Detection with OpenCV in Rust Using ONNX Models](https://linzichun.com/posts/rust-opencv-onnx-yolov8-detect/)
+- https://www.perceptivebits.com/building-gpt-from-scratch-in-rust-and-candle/
 
 ## License
 
