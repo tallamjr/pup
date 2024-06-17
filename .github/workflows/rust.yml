@@ -60,6 +60,7 @@ jobs:
         run: |
           env HOMEBREW_NO_AUTO_UPDATE=1 brew install miniforge
           env HOMEBREW_NO_AUTO_UPDATE=1 brew install opencv || true
+          export DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/usr/lib/"
         if: matrix.platform.os_name == 'macOS-aarch64'
       # Compile, build.
       - name: Build binaries
