@@ -13,5 +13,11 @@
 # [target.aarch64-apple-darwin]
 # rustflags = ["-C", "link-arg=-fuse-ld=/opt/homebrew/opt/llvm/bin/ld64.lld"]
 
+[target.aarch64-apple-darwin]
+rustflags = [
+  "-C", "link-arg=-undefined",
+  "-C", "link-arg=dynamic_lookup",
+]
+
 # [target.armv7-unknown-linux-gnueabihf]
 # linker = "arm-linux-gnueabihf-gcc"
