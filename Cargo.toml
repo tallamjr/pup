@@ -3,6 +3,7 @@ name = "pup"
 version = "0.1.0"
 edition = "2021"
 
+[target.'cfg(target_vendor= "apple")'.dependencies]
 [dependencies]
 anyhow = "1.0.79"
 candle = { git = "https://github.com/huggingface/candle.git", version = "0.6.0", features = ["metal"], package = "candle-core"}
@@ -22,4 +23,4 @@ rusttype = "0.9.3"
 mat2image = { git = "https://github.com/rcastill/mat2image.git", rev = "f222cb14"}
 # mat2image = { git = "https://github.com/rcastill/mat2image.git"}
 openssl = { version = "0.10", features = ["vendored"] }
-opencv = "=0.91.3"
+opencv = "=0.88.8"
