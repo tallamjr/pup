@@ -4,12 +4,9 @@ extern crate intel_mkl_src;
 #[cfg(feature = "accelerate")]
 extern crate accelerate_src;
 
-use image::DynamicImage;
+use image::{DynamicImage, ImageBuffer};
 
 use opencv::{core, highgui, prelude::*, videoio};
-
-// use cv_convert::{FromCv, IntoCv, TryFromCv, TryIntoCv};
-use mat2image::ToImage;
 
 mod model;
 use model::{Multiples, YoloV8, YoloV8Pose};
@@ -391,6 +388,22 @@ fn dynamic_image_to_mat(image: DynamicImage) -> opencv::Result<Mat> {
     Ok(mat)
 }
 
+fn mat_to_dynamic_image(mat: &Mat) -> DynamicImage {
+    let mat_size = mat.size().unwrap();
+    let width = mat_size.width;
+    let height = mat_size.height;
+    // let mat_type = mat.typ();
+
+    // let channels = core::CV_8UC3 as u8;
+    // assert!(channels == 3, "Expected 3 channels for RGB image");
+
+    let data = mat.data_bytes().unwrap();
+    let image_buffer: ImageBuffer<image::Rgb<u8>, Vec<u8>> =
+        ImageBuffer::from_raw(width as u32, height as u32, data.to_vec()).unwrap();
+
+    DynamicImage::ImageRgb8(image_buffer)
+}
+
 pub fn run<T: Task>(args: Args) -> anyhow::Result<()> {
     let device = pup::device(args.cpu)?;
     // Create the model and load the weights from the file.
@@ -449,7 +462,8 @@ pub fn run<T: Task>(args: Args) -> anyhow::Result<()> {
             // Process the nth frame
             println!("Processing frame {}", frame_count);
 
-            let original_image = frame.to_image()?;
+            // let original_image = frame.to_image()?;
+            let original_image = mat_to_dynamic_image(&frame);
 
             let (width, height) = {
                 let w = original_image.width() as usize;
@@ -504,7 +518,8 @@ pub fn run<T: Task>(args: Args) -> anyhow::Result<()> {
                 0,
             )?;
 
-            highgui::imshow(window, &bgr_img_mat)?;
+            // highgui::imshow(window, &bgr_img_mat)?;
+            highgui::imshow(window, &frame)?;
 
             let key = highgui::wait_key(1)?;
             if key > 0 && key != 255 {
