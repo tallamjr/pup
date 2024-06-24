@@ -176,6 +176,46 @@ $ du -sh target/release/pup
 4.2M    target/release/pup
 ```
 
+We can also look at which crates take up the most space:
+
+```bash
+   Compiling pup v0.1.0 ...
+   ....
+    Finished `release` profile [optimized] target(s) in 1m 39s
+    Analyzing target/release/pup
+
+ File  .text     Size Crate
+ 9.5%  26.9% 420.4KiB url
+ 7.8%  21.8% 341.8KiB std
+ 3.5%   9.8% 153.8KiB candle_core
+ 3.1%   8.8% 137.2KiB [Unknown]
+ 2.7%   7.6% 118.8KiB rustls
+ 2.0%   5.8%  90.2KiB clap_builder
+ 1.9%   5.3%  82.8KiB image
+ 1.7%   4.9%  76.6KiB pup
+ 1.6%   4.5%  70.8KiB ring
+ 1.3%   3.8%  59.1KiB ureq
+ 1.2%   3.4%  53.9KiB gemm_f16
+ 0.9%   2.5%  38.4KiB ttf_parser
+ 0.7%   1.9%  29.0KiB gemm_f32
+ 0.6%   1.7%  26.4KiB gemm_f64
+ 0.5%   1.4%  21.9KiB png
+ 0.4%   1.2%  19.3KiB indicatif
+ 0.4%   1.2%  18.9KiB jpeg_decoder
+ 0.4%   1.1%  17.1KiB webpki
+ 0.4%   1.0%  15.6KiB safetensors
+ 0.3%   1.0%  15.3KiB miniz_oxide
+ 4.0%  11.2% 175.6KiB And 76 more crates. Use -n N to show more.
+35.5% 100.0%   1.5MiB .text section size, the file size is 4.3MiB
+
+Note: numbers above are a result of guesswork. They are not 100% correct and never will be.
+
+```
+
+We can see the `url` crate is taking up a lot of space which may be linked to
+how to pull down weights. If we move to an `ORT` model serving method we could
+potentially save here, _but let's see how we go_
+
 ## Runtime
 
 To investigate the runtime memory footprint we can use `leaks` utility on macOS.
