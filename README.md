@@ -99,6 +99,85 @@ $ du -sh target/release/pup
 5.7M    pup
 ```
 
+If we use those tips and tricks such as:
+
+```diff
++ [profile.release]
++ codegen-units = 1   # Reduce number of codegen units to increase optimizations.
++ lto = true          # Enable Link Time Optimization
++ opt-level = "z"     # Optimize for size.
++ panic = "abort"     # Abort on panic
++ strip = true        # Automatically strip symbols from the binary.
+```
+we can get this down further to ~ 3Mb.
+
+```bash
+$ cargo clean && cargo +nightly run --release -- --video assets/sample.mp4
+$ du -sh target/release/pup
+2.8M    pup
+```
+
+### `cargo-bloat` & `cargo-size`
+
+Two handy cargo crates for inspecting and profiling for where the memory is
+being used up is [`cargo bloat`](https://github.com/RazrFalcon/cargo-bloat) and
+[`cargo size`](https://github.com/rust-embedded/cargo-binutils) with the latter
+being syntactic-sugar for the `rust-size` utility found in rust-embedded's
+`cargo-binutils` crate.
+
+```bash
+$ rust-size -A target/release/pup
+target/release/pup  :
+section                 size         addr
+__text               1576592   4294984896
+__stubs                 1620   4296561488
+__stub_helper           1620   4296563108
+__const              1017480   4296564736
+__gcc_except_tab        6360   4297582216
+__cstring                 52   4297588576
+__unwind_info          21592   4297588628
+__eh_frame             42712   4297610224
+__got                     80   4297654272
+__const                73816   4297654352
+__la_symbol_ptr         1064   4297736192
+__data                  1712   4297737256
+__thread_vars            672   4297738968
+__thread_data             64   4297739640
+__thread_bss             392   4297739704
+__bss                   1128   4297740096
+__common                   4   4297741224
+Total                2746960
+
+```
+With the above numbers in bytes, i.e. 2746960 bytes ~ 2.8Mb.
+
+```bash
+$ cargo +nightly bloat --release -n 10
+ File  .text     Size        Crate Name
+ 9.3%  25.9% 399.2KiB          url core::panicking::assert_failed
+ 0.5%   1.4%  21.3KiB        image jpeg_decoder::decoder::Decoder<R>::decode_internal
+ 0.4%   1.2%  18.0KiB          pup pup::main
+ 0.4%   1.1%  17.2KiB    [Unknown] __mh_execute_header
+ 0.3%   0.9%  13.4KiB  candle_core candle_core::cpu_backend::utils::Map1Any::map
+ 0.3%   0.8%  12.9KiB clap_builder clap_builder::parser::parser::Parser::get_matches_with
+ 0.3%   0.8%  12.0KiB   ttf_parser ttf_parser::Face::from_slice
+ 0.3%   0.8%  11.6KiB       rustls rustls::msgs::handshake::HandshakeMessagePayload::read_version
+ 0.3%   0.7%  11.0KiB          std std::backtrace_rs::symbolize::gimli::Context::new
+ 0.3%   0.7%  10.9KiB  candle_core <candle_core::cpu_backend::CpuStorage as candle_core::backend::BackendStorage>::to_dtype
+33.4%  92.8%   1.4MiB              And 11025 smaller methods. Use -n N to show more.
+36.0% 100.0%   1.5MiB              .text section size, the file size is 4.2MiB
+```
+**Note**, the above does not include all the optimizations listed previously so
+it is re-compiled and the `.text` section size is of the order `4Mb`. But it
+gives us a good indication as to where the bulk of the code is being used up.
+
+```bash
+$ du -sh target/release/pup
+4.2M    target/release/pup
+```
+
+## Runtime
+
 To investigate the runtime memory footprint we can use `leaks` utility on macOS.
 
 ```bash
