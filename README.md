@@ -297,6 +297,19 @@ STACK OF 3 INSTANCES OF 'ROOT LEAK: <NSMutableDictionary>':
 
 Note the memory leaks 😬, albeit tiny ..
 
+### `cargo-flamegraph`
+
+We can also explore the stracktrace of the programme for a fine grain
+visualisation of what the CPU/GPU is doing step-by-step with flamegraphs[^1]
+using [`cargo-flamegraph`](https://github.com/flamegraph-rs/flamegraph)
+
+![Alt text](./assets/flamegraph.svg)
+<!-- <img src="./assets/flamegraph.svg"> -->
+
+**Note**, the above is just a static image but the tool produces an interactive
+`svg` image. To view it properly and inspect each function call it is
+recommended to open the `.svg` file in your favourite browser.
+
 ## Cross-compiling (wip) 🚧
 
 One of the most attractive things about using rust is the tools that are
@@ -320,7 +333,7 @@ https://github.com/rust-cross/rust-musl-cross
 `opencv` cross compilation complications 👇
 - https://github.com/twistedfall/opencv-rust/blob/master/INSTALL.md#crosscompilation
 
-## Refs
+## Useful Links
 
 - https://doc.rust-lang.org/rustc/platform-support.html
 - [How do I get a vector of u8 RGB values when using the image crate?](https://stackoverflow.com/a/50821290/4521950)
@@ -332,6 +345,12 @@ https://github.com/rust-cross/rust-musl-cross
 - https://github.com/ToluClassics/candle-tutorial
 - [Implementing YOLOv8 Object Detection with OpenCV in Rust Using ONNX Models](https://linzichun.com/posts/rust-opencv-onnx-yolov8-detect/)
 
+
 ## License
 
 `pup` is distributed under the terms of the [MIT](https://spdx.org/licenses/MIT.html) license.
+
+<!-- REFERENCES/FOOTNOTES -->
+
+[^1]: https://www.brendangregg.com/FlameGraphs/cpuflamegraphs.html
+
