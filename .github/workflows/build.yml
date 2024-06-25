@@ -1,51 +1,91 @@
 name: build
 
-on: [ push, pull_request ]
+on:
+  push:
+    branches: ["issues/2/ci"]
+  pull_request:
+    branches: ["master"]
+
+permissions:
+  contents: write
 
 jobs:
-  default:
-    name: Default
+  build:
+    name: ${{ matrix.platform.os_name }} with rust ${{ matrix.toolchain }}
     strategy:
+      fail-fast: false
       matrix:
-        platform: [ ubuntu-latest, macos-latest ]
-        toolchain: [ stable, nightly ]
-    runs-on: ${{ matrix.platform }}
+        platform:
+          # - os_name: Linux-aarch64
+          #   os: ubuntu-20.04
+          #   target: aarch64-unknown-linux-musl
+          #   bin: pup-linux-arm64
+          # - os_name: Linux-x86_64
+          #   os: ubuntu-20.04
+          #   target: x86_64-unknown-linux-gnu
+          #   bin: pup-linux-amd64
+          # - os_name: macOS-x86_64
+          #   os: macOS-latest
+          #   target: x86_64-apple-darwin
+          #   bin: pup-darwin-amd64
+          - os_name: macOS-aarch64
+            os: macOS-latest
+            target: aarch64-apple-darwin
+            bin: pup-darwin-arm64
+        toolchain:
+          # - stable
+          - nightly
+        opencv:
+          - "4.9.0"
+    runs-on: ${{ matrix.platform.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
+      # <----------- OPENCV ---------------->
+      - name: Setup opencv
+        uses: Dovyski/setup-opencv-action@v1.1
+        with:
+          opencv-version: ${{ matrix.opencv }}
+        if: matrix.platform.os != 'macOS-latest'
+      # <----------- TOOLCHAIN -------------->
+      - name: Stable vs. nightly compiler
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain }}
-      - name: Build
-        run: cargo build --release --all-features
-  no_std:
-    name: no_std
-    strategy:
-      matrix:
-        platform: [ ubuntu-latest, macos-latest ]
-        toolchain: [ stable, nightly ]
-    runs-on: ${{ matrix.platform }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
+      # Above action assumes Linux distro for opencv install
+      - name: Update Homebrew
+        run: |
+          brew update --preinstall
+          brew bundle --file .config/brew/Brewfile || true
+        if: matrix.platform.os == 'macOS-latest'
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
         with:
+          xcode-version: "15.4"
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2.0.3
+        with:
+          version: "17"
+          arch: "arm64"
+      - name: OpenCV Troubleshooting
+        run: |
+          export DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/usr/lib/"
+      # <------------- BUILD ----------->
+      - name: Build binaries
+        uses: houseabsolute/actions-rust-cross@v0
+        with:
+          command: "build"
+          target: ${{ matrix.platform.target }}
           toolchain: ${{ matrix.toolchain }}
-      - name: Build
-        working-directory: no_std/nix
-        run: cargo build --release --all-features
-  build_std:
-    name: build-std
-    strategy:
-      matrix:
-        project_dir: [ build_std, no_main/nix ]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
+          args: "--release"
+          strip: true
+      - name: Rename binary (linux and macos)
+        run: mv target/${{ matrix.platform.target }}/release/pup target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}
+      - name: Generate SHA-256
+        run: shasum -a 256 target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }} | cut -d ' ' -f 1 > target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}.sha256
+      # <------------- PUBLISH ----------->
+      - name: Release binary and SHA-256 checksum to GitHub
+        uses: softprops/action-gh-release@v1
         with:
-          toolchain: nightly
-      - name: Build
-        working-directory: ${{ matrix.project_dir }}
-        run: >
-          rustup component add rust-src;
-          RUSTFLAGS="-Zlocation-detail=none" cargo +nightly build -Z build-std=std,panic_abort -Z build-std-features="optimize_for_size" --target x86_64-unknown-linux-gnu --release;
-          cargo +nightly build -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort --target x86_64-unknown-linux-gnu --release;
+          files: |
+            target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}
+            target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}.sha256
