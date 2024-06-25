@@ -16,8 +16,8 @@ rustflags = ["-C", "link-arg=-fuse-ld=lld"]
 rustflags = [
   "-C", "link-arg=-undefined",
   "-C", "link-arg=dynamic_lookup",
-  # Xcode 16 beta linker.
-  "-C", "link-arg=-fuse-ld=/Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld",
+  # Xcode linker.
+  "-C", "link-arg=-fuse-ld=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld",
   "-Zlocation-detail=none", # `Z` is only accepted on the nightly compiler: `rustup default nightly`
 ]
 
