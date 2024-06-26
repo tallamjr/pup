@@ -40,18 +40,17 @@ jobs:
     runs-on: ${{ matrix.platform.os }}
     steps:
       - uses: actions/checkout@v4
+      # <----------- TOOLCHAIN -------------->
+      - name: Stable vs. nightly compiler
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
       # <----------- OPENCV ---------------->
       - name: Setup opencv
         uses: Dovyski/setup-opencv-action@v1.1
         with:
           opencv-version: ${{ matrix.opencv }}
         if: matrix.platform.os != 'macOS-latest'
-      # <----------- TOOLCHAIN -------------->
-      - name: Stable vs. nightly compiler
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.toolchain }}
-      # Above action assumes Linux distro for opencv install
       - name: Update Homebrew
         run: |
           brew update --preinstall
@@ -62,14 +61,23 @@ jobs:
         with:
           xcode-version: "15.4"
         if: matrix.platform.os == 'macOS-latest'
+      # <----------- LLVM ---------------->
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v2.0.3
         with:
           version: "17"
           arch: "arm64"
-      - name: OpenCV Troubleshooting
+        if: matrix.platform.os == 'macOS-latest'
+      # <--------- PLATFORM SPECIFICS ----------->
+      - name: macOS: OpenCV Troubleshooting
         run: |
           export DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/usr/lib/"
+        if: matrix.platform.os == 'macOS-latest'
+      - name: linux: Objective-C++ cross compiler package
+        run: |
+          # fix 'error trying to exec 'cc1obj': execvp: No such file or directory
+          sudo apt install gobjc++-mingw-w64
+        if: matrix.platform.os != 'macOS-latest'
       # <------------- BUILD ----------->
       - name: Build binaries
         uses: houseabsolute/actions-rust-cross@v0
