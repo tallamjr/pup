@@ -69,11 +69,11 @@ jobs:
           arch: "arm64"
         if: matrix.platform.os == 'macOS-latest'
       # <--------- PLATFORM SPECIFICS ----------->
-      - name: macOS: OpenCV Troubleshooting
+      - name: macOS -- OpenCV Troubleshooting
         run: |
           export DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/usr/lib/"
         if: matrix.platform.os == 'macOS-latest'
-      - name: linux: Objective-C++ cross compiler package
+      - name: linux -- Objective-C++ cross compiler package
         run: |
           # fix 'error trying to exec 'cc1obj': execvp: No such file or directory
           sudo apt install gobjc++-mingw-w64
