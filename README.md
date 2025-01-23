@@ -109,6 +109,7 @@ If we use those tips and tricks such as:
 + panic = "abort"     # Abort on panic
 + strip = true        # Automatically strip symbols from the binary.
 ```
+
 we can get this down further to ~ 3Mb.
 
 ```bash
@@ -149,6 +150,7 @@ __common                   4   4297741224
 Total                2746960
 
 ```
+
 With the above numbers in bytes, i.e. 2746960 bytes ~ 2.8Mb.
 
 ```bash
@@ -167,6 +169,7 @@ $ cargo +nightly bloat --release -n 10
 33.4%  92.8%   1.4MiB              And 11025 smaller methods. Use -n N to show more.
 36.0% 100.0%   1.5MiB              .text section size, the file size is 4.2MiB
 ```
+
 **Note**, the above does not include all the optimizations listed previously so
 it is re-compiled and the `.text` section size is of the order `4Mb`. But it
 gives us a good indication as to where the bulk of the code is being used up.
@@ -253,15 +256,18 @@ This gives an average memory usage of ~100Mb and total peak memory usage of
 ~690Mb.
 
 _Chatgpt summary of Peak Physical vs. Physical:_
+
 > The terms "physical memory footprint" and "peak physical memory footprint" both
 > relate to the amount of physical memory (RAM) used by a process or application, but they capture different aspects of memory usage:
 >
 > 1. **Physical Memory Footprint:**
->   - The physical memory footprint generally refers to the amount of RAM that a process or application is actively using at a specific point in time or on average during its execution.  - It represents the current or average memory consumption and is not necessarily the maximum amount of memory used throughout the entire runtime of the process.
+>
+> - The physical memory footprint generally refers to the amount of RAM that a process or application is actively using at a specific point in time or on average during its execution. - It represents the current or average memory consumption and is not necessarily the maximum amount of memory used throughout the entire runtime of the process.
 >
 > 2. **Peak Physical Memory Footprint:**
->  - The peak physical memory footprint specifically refers to the maximum amount of RAM that a process or application has used during its entire execution.  - It represents the highest point of memory consumption reached by the process or application.
-> In summary, the physical memory footprint gives you an idea of the current or average memory usage, while the peak physical memory footprint highlights the maximum memory usage observed over the entire lifetime of the process or application. Monitoring both metrics is important for understanding how an application utilizes memory resources and for optimizing performance and resource management.
+>
+> - The peak physical memory footprint specifically refers to the maximum amount of RAM that a process or application has used during its entire execution. - It represents the highest point of memory consumption reached by the process or application.
+>   In summary, the physical memory footprint gives you an idea of the current or average memory usage, while the peak physical memory footprint highlights the maximum memory usage observed over the entire lifetime of the process or application. Monitoring both metrics is important for understanding how an application utilizes memory resources and for optimizing performance and resource management.
 
 As an aside, here is a snippet of the python example (note, they are not the
 same program and this is only show as an illustration)
@@ -318,6 +324,7 @@ docker based tools such as https://github.com/cross-rs/cross or
 https://github.com/rust-cross/rust-musl-cross
 
 `opencv` cross compilation complications 👇
+
 - https://github.com/twistedfall/opencv-rust/blob/master/INSTALL.md#crosscompilation
 
 ## Refs
@@ -335,3 +342,8 @@ https://github.com/rust-cross/rust-musl-cross
 ## License
 
 `pup` is distributed under the terms of the [MIT](https://spdx.org/licenses/MIT.html) license.
+
+let input_shape = input_tensor.shape().to_vec();
+let input_data = input_tensor.iter().cloned().collect::<Vec<f32>>();
+
+let inputs = ort::inputs!("input" => (input_shape, input_data)).ok()?;

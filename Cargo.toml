@@ -9,7 +9,7 @@ clap = { version = "4", features = ["derive"] }
 gstreamer = "0.21"
 gstreamer-video = "0.21"
 gstreamer-app = "0.21"
-ort = { version = "2.0.0-rc.9" , features = ["load-dynamic"] }
+ort = { version = "2.0.0-rc.9" }
 ndarray = "0.15"
 anyhow = "1.0"
 
