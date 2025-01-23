@@ -45,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 4) GStreamer pipeline from MP4 => decode => 224x224 RGB => appsink
     let pipeline_str = format!(
         "filesrc location={} ! decodebin ! videoconvert ! videoscale \
-         ! video/x-raw,format=RGB,width=224,height=224 \
+         ! video/x-raw,format=RGB,width=640,height=640 \
          ! appsink name=sink",
         args.video
     );
@@ -155,7 +155,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let input_data = input_tensor.as_slice().unwrap();
 
             // The model's input name might be "input", "images", etc.
-            let input_name = "image";
+            let input_name = "images";
             // The macro expects shape + data if you’re not passing a single slice
             // E.g. ( [1,3,height,width], data ), or just data if you have an impl for it.
             //
