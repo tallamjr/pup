@@ -1,4 +1,5 @@
 use clap::Parser;
+use gstreamer::parse::launch;
 use gstreamer::prelude::*;
 use gstreamer::{FlowReturn, MessageView, State};
 use gstreamer_app::AppSink;
@@ -50,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         args.video
     );
 
-    let pipeline = gstreamer::parse_launch(&pipeline_str)?
+    let pipeline = launch(&pipeline_str)?
         .dynamic_cast::<gstreamer::Pipeline>()
         .expect("Failed to cast pipeline to gstreamer::Pipeline");
 
