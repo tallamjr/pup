@@ -1,3 +1,5 @@
+mod common;
+
 use clap::Parser;
 use gstreamer::parse::launch;
 use gstreamer::prelude::*;
@@ -5,6 +7,7 @@ use gstreamer::{FlowReturn, MessageView, State};
 use gstreamer_app::AppSink;
 use gstreamer_video::{VideoFrameRef, VideoInfo};
 use ndarray::{Array4, ArrayView3};
+use ort::execution_providers::CoreMLExecutionProvider;
 use ort::inputs; // The macro is here in 0.17
 use ort::session::builder::SessionBuilder; // For older builder pattern
 use ort::session::{builder::GraphOptimizationLevel, Session};
@@ -23,7 +26,7 @@ struct Args {
     video: String,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn gst_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // 1) Parse CLI
     let args = Args::parse();
 
@@ -38,6 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let session_obj: Session = Session::builder()?
         .with_optimization_level(GraphOptimizationLevel::Level3)?
         .with_intra_threads(4)?
+        .with_execution_providers([CoreMLExecutionProvider::default().build()])?
         .commit_from_file(&args.model)?;
 
     // Wrap it in Arc<Mutex<...>> with explicit type annotation
@@ -252,4 +256,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     pipeline.set_state(State::Null)?;
     println!("Pipeline stopped.");
     Ok(())
+}
+
+fn main() {
+    // tutorials_common::run is only required to set up the application environment on macOS
+    // (but not necessary in normal Cocoa applications where this is set up automatically)
+    common::run(gst_main);
 }
