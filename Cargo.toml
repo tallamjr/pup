@@ -18,6 +18,8 @@ glib = "0.20.7"  # Ensure compatibility across both crates
 cairo-rs = { version = "0.16", features = ["use_glib"] }
 opencv = "0.94.2"
 rayon = "1.7"
+pango = "0.16"
+pangocairo = "0.16"
 
 [target.'cfg(target_os = "macos")'.build-dependencies]
 system-deps = "7"
