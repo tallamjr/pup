@@ -201,7 +201,7 @@ fn gst_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                         let score = data[[0, box_i, 4]];
                                         let class_id = data[[0, box_i, 5]] as i32;
 
-                                        if score > 0.5 {
+                                        if score > 50.0 {
                                             Some(Detection {
                                                 x1,
                                                 y1,
