@@ -22,8 +22,8 @@ struct Detection {
     y1: f32,
     x2: f32,
     y2: f32,
-    score: f32,
-    class_id: i32,
+    score: f32,    // best class score
+    class_id: i32, // best class index
 }
 
 // Shared storage for detections
@@ -43,13 +43,15 @@ struct Args {
 }
 
 fn gst_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // 1) Parse CLI
     println!("Parsing command-line arguments...");
     let args = Args::parse();
     println!("Parsed arguments: {:?}", args);
 
+    // Verify model path
     if !std::path::Path::new(&args.model).exists() {
         eprintln!("Error: ONNX model file '{}' not found.", args.model);
-        return Err(Box::from("Model file not found."));
+        return Err("Model file not found.".into());
     }
 
     println!("Initializing GStreamer...");
@@ -67,26 +69,27 @@ fn gst_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let session: Arc<Mutex<Session>> = Arc::new(Mutex::new(session_obj));
     let detections: DetectionList = Arc::new(Mutex::new(Vec::new()));
 
-    // Build the pipeline string differently depending on --video
+    // 2) Build pipeline string based on --video
     println!("Setting up GStreamer pipeline...");
     let pipeline_str = if let Some(video_path) = &args.video {
-        // Use a video file pipeline
+        // Use a video file pipeline with two branches:
+        //   1) Original aspect ratio -> autovideosink
+        //   2) Resized forcibly to 640×640 -> appsink
         format!(
-            "filesrc location=\"{}\" ! decodebin ! videoconvert ! videoscale \
-             ! video/x-raw,format=RGB,width=640,height=640 \
-             ! tee name=t \
-                 t. ! queue ! appsink name=sink \
-                 t. ! queue ! autovideosink",
-            video_path
+            "filesrc location=\"{video_path}\" ! decodebin name=d \
+       d. ! queue ! videoconvert ! tee name=t \
+         t. ! queue ! autovideosink \
+         t. ! queue ! videoscale ! video/x-raw,format=RGB,width=640,height=640 ! appsink name=sink \
+       d. ! queue ! audioconvert ! audioresample ! autoaudiosink"
         )
     } else {
         // Use the webcam (avfvideosrc) by default
         format!(
             "avfvideosrc ! videoconvert ! videoscale \
-             ! video/x-raw,format=RGB,width=640,height=640 \
-             ! tee name=t \
-                 t. ! queue ! appsink name=sink \
-                 t. ! queue ! autovideosink"
+         ! video/x-raw,format=RGB,width=640,height=640 \
+         ! tee name=t \
+             t. ! queue ! appsink name=sink \
+             t. ! queue ! autovideosink"
         )
     };
 
@@ -102,6 +105,7 @@ fn gst_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .dynamic_cast::<AppSink>()
         .expect("'sink' is not an appsink");
 
+    // We'll pull frames from "sink"
     appsink.set_property("emit-signals", &true);
 
     let session_clone = Arc::clone(&session);
@@ -113,63 +117,61 @@ fn gst_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .get::<AppSink>()
             .expect("Failed to retrieve AppSink from signal vals");
 
+        // Pull the latest sample
         if let Ok(sample) = appsink.pull_sample() {
             if let Some(buffer) = sample.buffer() {
                 if let Some(caps) = sample.caps() {
                     if let Ok(info) = VideoInfo::from_caps(&caps) {
                         let (width, height) = (info.width() as usize, info.height() as usize);
 
-                        // Acquire the frame data
+                        // Acquire the raw frame data
                         if let Ok(frame) = VideoFrameRef::from_buffer_ref_readable(&buffer, &info) {
                             if let Ok(frame_data) = frame.plane_data(0) {
                                 println!("Processing frame: {}x{}", width, height);
 
-                                // 1) Allocate a buffer for pixel data, normalized to [0..1]
-                                let total_elems = 1 * 3 * height * width;
-                                let mut buffer = vec![0f32; total_elems];
+                                // 1) Convert each pixel to [0..1]
+                                let total_elems = 3 * height * width; // 1 batch
+                                if frame_data.len() < total_elems {
+                                    eprintln!("Frame data is too small, skipping frame");
+                                    return Some(FlowReturn::Ok.to_value());
+                                }
 
-                                // 2) Fill `buffer` in parallel
-                                buffer.par_iter_mut().enumerate().for_each(|(i, px)| {
-                                    let pixel = frame_data[i];
-                                    *px = pixel as f32 / 255.0;
-                                });
+                                let mut float_buffer = vec![0f32; total_elems];
+                                float_buffer
+                                    .par_iter_mut()
+                                    .enumerate()
+                                    .for_each(|(i, px)| {
+                                        *px = frame_data[i] as f32 / 255.0;
+                                    });
 
-                                // 3) Convert `buffer` to an Array4<f32>
-                                let input_tensor = match Array4::from_shape_vec(
-                                    (1, 3, height, width),
-                                    buffer,
-                                ) {
-                                    Ok(t) => t,
+                                // 2) Build an Array4
+                                let arr = match Array4::from_shape_vec((1, 3, height, width), float_buffer) {
+                                    Ok(a) => a,
                                     Err(e) => {
-                                        eprintln!("Failed to reshape buffer into Array4: {:?}", e);
+                                        eprintln!("Failed to reshape buffer: {:?}", e);
                                         return Some(FlowReturn::Ok.to_value());
                                     }
                                 };
 
-                                println!("Running inference...");
-
-                                // 4) Flatten for ONNX input
-                                let flattened_data = input_tensor.as_slice().unwrap().to_vec();
+                                // Flatten
+                                let flattened = arr.as_slice().unwrap().to_vec();
                                 let shape = [1_i64, 3, height as i64, width as i64];
 
-                                // 5) Build the ONNX input tensor
-                                let mut value = match Value::from_array((shape, flattened_data)) {
+                                // 3) Create ONNX input
+                                let mut val = match Value::from_array((shape, flattened)) {
                                     Ok(v) => v,
                                     Err(e) => {
                                         eprintln!("Failed to create ONNX tensor: {:?}", e);
                                         return Some(FlowReturn::Ok.to_value());
                                     }
                                 };
+                                val = val.into(); // dynamic if needed
 
-                                // 6) Convert to dynamic if the model expects Value<DynValueTypeMarker>
-                                value = value.into();
+                                let input_values = vec![("images".to_owned(), val)];
 
-                                // 7) Create input list
-                                let input_values = vec![("images".to_string(), value)];
-
-                                // 8) Run inference
+                                // 4) Inference
                                 let locked_session = session_clone.lock().unwrap();
-                                let outputs = match locked_session.run(input_values) {
+                                let outs = match locked_session.run(input_values) {
                                     Ok(o) => o,
                                     Err(e) => {
                                         eprintln!("Session run failed: {:?}", e);
@@ -177,59 +179,81 @@ fn gst_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                     }
                                 };
 
-                                let output_tensor = match outputs["output0"].try_extract_tensor::<f32>()
-                                {
+                                // YOLOv8 shape usually [1, 84, #boxes]
+                                let output_tensor = match outs["output0"].try_extract_tensor::<f32>() {
                                     Ok(t) => t,
                                     Err(e) => {
-                                        eprintln!("Failed to extract output tensor: {:?}", e);
+                                        eprintln!("Failed extracting output: {:?}", e);
                                         return Some(FlowReturn::Ok.to_value());
                                     }
                                 };
 
                                 println!("YOLO output shape: {:?}", output_tensor.shape());
+
+                                // Suppose shape is [1, 84, num_boxes]
                                 let data = output_tensor.view();
-                                let num_boxes = data.shape()[1];
+                                let channels = data.shape()[1];
+                                let num_boxes = data.shape()[2]; // if the layout is [1, 84, #boxes]
 
-                                // 9) Detection filtering
-                                let dets: Vec<Detection> = (0..num_boxes)
-                                    .into_par_iter()
-                                    .filter_map(|box_i| {
-                                        let x1 = data[[0, box_i, 0]] * width as f32;
-                                        let y1 = data[[0, box_i, 1]] * height as f32;
-                                        let x2 = data[[0, box_i, 2]] * width as f32;
-                                        let y2 = data[[0, box_i, 3]] * height as f32;
-                                        let score = data[[0, box_i, 4]];
-                                        let class_id = data[[0, box_i, 5]] as i32;
+                                // We interpret:
+                                //   data[[0, 0, i]] => cx
+                                //   data[[0, 1, i]] => cy
+                                //   data[[0, 2, i]] => w
+                                //   data[[0, 3, i]] => h
+                                //   data[[0, 4..84, i]] => 80 class scores
+                                // If your model is different, adjust indexing.
 
-                                        if score > 50.0 {
-                                            Some(Detection {
-                                                x1,
-                                                y1,
-                                                x2,
-                                                y2,
-                                                score,
-                                                class_id,
-                                            })
-                                        } else {
-                                            None
+                                // YOLOv8 shape => [1, 84, num_boxes]
+                                // channels=84 => [0..4] = [cx,cy,w,h], [4..84] = class scores
+                                let mut dets = Vec::new();
+
+                                // Iterate over boxes
+                                for i in 0..num_boxes {
+                                    // 1) decode bounding box
+                                    let cx = data[[0, 0, i]] * width as f32;
+                                    let cy = data[[0, 1, i]] * height as f32;
+                                    let w  = data[[0, 2, i]] * width as f32;
+                                    let h  = data[[0, 3, i]] * height as f32;
+
+                                    let x1 = cx - w*0.5;
+                                    let y1 = cy - h*0.5;
+                                    let x2 = cx + w*0.5;
+                                    let y2 = cy + h*0.5;
+
+                                    // 2) find best class by scanning [4..channels]
+                                    let mut best_score = -f32::MAX;
+                                        let mut best_class = -1;
+                                        for c in 4..84 {
+                                            let cls_score = data[[0, c, i]];
+                                            if cls_score > best_score {
+                                                best_score = cls_score;
+                                                best_class = (c - 4) as i32;
+                                            }
                                         }
-                                    })
-                                    .collect();
+
+                                    // 3) filter by score
+                                    if best_score > 0.0 {
+                                        println!("DEBUG: box {} best_score={:.3} best_class={}", i, best_score, best_class);
+                                            dets.push(Detection {
+                                                x1, y1, x2, y2,
+                                                score: best_score,
+                                                class_id: best_class,
+                                            });
+                                        }
+                                    }
 
                                 // Print each detection
                                 for d in &dets {
+                                    let w = d.x2 - d.x1;
+                                    let h = d.y2 - d.y1;
                                     println!(
                                         "Detected class={} score={:.2} bbox=({:.2}, {:.2}, {:.2}, {:.2})",
-                                        d.class_id,
-                                        d.score,
-                                        d.x1,
-                                        d.y1,
-                                        d.x2 - d.x1,
-                                        d.y2 - d.y1
+                                        d.class_id, d.score,
+                                        d.x1, d.y1, w, h
                                     );
                                 }
 
-                                // Update detection list
+                                // Save
                                 *detections_clone.lock().unwrap() = dets;
                             }
                         }
@@ -245,7 +269,7 @@ fn gst_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     pipeline.set_state(State::Playing)?;
 
     let bus = pipeline.bus().unwrap();
-    for msg in bus.iter_timed(gstreamer::ClockTime::NONE) {
+    for msg in bus.iter_timed(ClockTime::NONE) {
         match msg.view() {
             MessageView::Eos(_) => {
                 println!("End of stream.");
