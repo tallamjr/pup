@@ -44,6 +44,31 @@ model defined in candle and applies it to video frames. The model itself could
 of course be switched out for any other object detection architecture, this was
 only chosen as a first attempt at combining `opencv` with `candle`.
 
+## UPDATE 2025: Now Attempting to use GStreamer
+
+- [GStreamer Tutorias](https://gstreamer.freedesktop.org/documentation/tutorials/?gi-language=c)
+  - Rust files: https://gitlab.freedesktop.org/gstreamer/gstreamer-rs/-/tree/main/tutorials/src/bin
+- [Rust library for fast image resizing with using of SIMD instructions](https://github.com/cykooz/fast_image_resize)
+- [Live Coding: Rust and GStreamer (building an RTMP switcher)](https://www.youtube.com/watch?v=mwuCMDSZdiQ&list=PLzgEG9tLG-1SJ-5ntU3SSir3G-iHw7Fsu&index=1&ab_channel=ErikDotDev)
+- [Build live stream server with gstreamer rust + ngnix rtmp part-1](https://www.youtube.com/watch?v=4lIpDEamnY4&list=PLa2dCM6b-1M4NYLjg2kl72lEDZqLMasaE&index=1&ab_channel=JasonShen)
+- [Building a Video Processing Server with Rust](https://www.youtube.com/watch?v=lMionnDLC_Y&ab_channel=ThinkBeforeYouCode)
+- [Multimedia using Rust and GStreamer](https://www.youtube.com/watch?v=_6J3gvK7N9Y&ab_channel=RustTechXSummit)
+- [WTF is GStreamer?](https://www.youtube.com/watch?v=6eU8W0E_evo&ab_channel=THEOCon)
+
+### General Video and Image Processing
+
+- [A hands-on introduction to video technology: image, video, codec](https://github.com/leandromoreira/digital_video_introduction?tab=readme-ov-file#how-to-use-jupyter)
+- [Video Streaming Onboarding](https://github.com/Eyevinn/streaming-onboarding)
+- [How video works](https://howvideo.works/)
+- [Visualize streams of multimodal data. Free, fast, easy to use, and simple to integrate. Built in Rust.](https://github.com/rerun-io/rerun)
+
+### Alternative Projects
+
+- Attempting similar thing, i.e. Rusty Video for Object detection pipelines: https://github.com/slckl/gstreamed_rust_inference
+- [Teleconference system written in rust](https://github.com/security-union/videocall-rs)
+
+---
+
 ## Usage
 
 To run the simple example, run:
