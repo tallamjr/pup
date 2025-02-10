@@ -4,13 +4,25 @@
 
 **Table of Contents**
 
-- [About](#about)
-- [Usage](#usage)
-- [Memory Footprint](#memory)
-- [Cross-compiling](#cross)
-- [License](#license)
+<!-- mtoc-start -->
 
-# About
+* [About](#about)
+  * [_Why?_](#why)
+  * [_What?_](#what)
+* [UPDATE 2025: Now Attempting to use GStreamer](#update-2025-now-attempting-to-use-gstreamer)
+  * [General Video and Image Processing](#general-video-and-image-processing)
+  * [Alternative Projects](#alternative-projects)
+* [Usage](#usage)
+* [Memory Footprint](#memory-footprint)
+  * [`cargo-bloat` & `cargo-size`](#cargo-bloat--cargo-size)
+* [Runtime](#runtime)
+* [Cross-compiling (wip) 🚧](#cross-compiling-wip-)
+* [Refs](#refs)
+* [License](#license)
+
+<!-- mtoc-end -->
+
+## About
 
 `pup` is a small proof-of-concept codebase for running ML models on video data
 using rust.
