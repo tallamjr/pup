@@ -9,7 +9,7 @@ use once_cell::sync::Lazy;
 
 #[derive(Default)]
 pub struct PupInference {
-    properties: Mutex<()>,
+    _properties: Mutex<()>,
 }
 
 #[glib::object_subclass]

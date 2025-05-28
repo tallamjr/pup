@@ -1,11 +1,14 @@
 [package]
 edition = "2021"
 name = "pup"
-version = "0.2.4"
+version = "0.2.5"
 description = "Real-time multi-task computer vision with GStreamer and ONNX Runtime"
 authors = ["Tarek Allam Jr <t.allam.jr@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/tallamjr/pup"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }
 
 [target.'cfg(target_vendor= "apple")'.dependencies]
 

@@ -14,8 +14,8 @@ use std::sync::{Arc, Mutex};
 
 pub struct SimpleVideoProcessor {
     pipeline: gst::Pipeline,
-    inference_backend: Arc<Mutex<Box<dyn InferenceBackend>>>,
-    preprocessor: Preprocessor,
+    _inference_backend: Arc<Mutex<Box<dyn InferenceBackend>>>,
+    _preprocessor: Preprocessor,
 }
 
 impl SimpleVideoProcessor {
@@ -139,8 +139,8 @@ impl SimpleVideoProcessor {
 
         Ok(Self {
             pipeline,
-            inference_backend,
-            preprocessor,
+            _inference_backend: inference_backend,
+            _preprocessor: preprocessor,
         })
     }
 

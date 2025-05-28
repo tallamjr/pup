@@ -16,7 +16,7 @@ use std::time::Duration;
 pub struct VideoPipeline {
     pipeline: gst::Pipeline,
     appsink: AppSink,
-    config: PipelineConfig,
+    _config: PipelineConfig,
     is_running: bool,
 }
 
@@ -44,7 +44,7 @@ impl VideoPipeline {
         Ok(Self {
             pipeline,
             appsink,
-            config: config.pipeline.clone(),
+            _config: config.pipeline.clone(),
             is_running: false,
         })
     }

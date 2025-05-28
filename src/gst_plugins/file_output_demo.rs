@@ -15,9 +15,9 @@ use std::sync::{Arc, Mutex};
 
 pub struct FileOutputProcessor {
     pipeline: gst::Pipeline,
-    inference_backend: Arc<Mutex<Box<dyn InferenceBackend>>>,
-    preprocessor: Preprocessor,
-    detections: Arc<Mutex<Vec<Detection>>>,
+    _inference_backend: Arc<Mutex<Box<dyn InferenceBackend>>>,
+    _preprocessor: Preprocessor,
+    _detections: Arc<Mutex<Vec<Detection>>>,
 }
 
 impl FileOutputProcessor {
@@ -165,9 +165,9 @@ impl FileOutputProcessor {
 
         Ok(Self {
             pipeline,
-            inference_backend,
-            preprocessor,
-            detections,
+            _inference_backend: inference_backend,
+            _preprocessor: preprocessor,
+            _detections: detections,
         })
     }
 
