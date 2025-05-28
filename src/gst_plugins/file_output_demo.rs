@@ -1,5 +1,5 @@
-//! Visual demo application with bounding box overlay
-//! Shows video with YOLO detections rendered as bounding boxes with labels
+//! File output demo that saves video with bounding box overlays
+//! This creates an output video file with YOLO detections rendered as overlays
 
 use crate::config::AppConfig;
 use crate::inference::{InferenceBackend, OrtBackend, TaskOutput};
@@ -12,24 +12,23 @@ use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
 use gstreamer_video as gst_video;
 use std::sync::{Arc, Mutex};
-//use cairo_rs::{Context, FontSlant, FontWeight};
 
-pub struct VisualVideoProcessor {
+pub struct FileOutputProcessor {
     pipeline: gst::Pipeline,
     inference_backend: Arc<Mutex<Box<dyn InferenceBackend>>>,
     preprocessor: Preprocessor,
     detections: Arc<Mutex<Vec<Detection>>>,
 }
 
-impl VisualVideoProcessor {
-    pub fn new(config: &AppConfig) -> Result<Self> {
+impl FileOutputProcessor {
+    pub fn new(config: &AppConfig, output_path: &str) -> Result<Self> {
         // Initialize GStreamer
         gst::init()?;
 
         // Create pipeline
         let pipeline = gst::Pipeline::new();
 
-        // Create elements
+        // Create source elements
         let filesrc = gst::ElementFactory::make("filesrc")
             .property("location", &config.pipeline.video_source)
             .build()?;
@@ -53,7 +52,7 @@ impl VisualVideoProcessor {
         // Create tee to split the stream
         let tee = gst::ElementFactory::make("tee").build()?;
         
-        // Create queue for inference path
+        // Create inference path
         let queue1 = gst::ElementFactory::make("queue").build()?;
         let appsink = gst_app::AppSink::builder()
             .caps(
@@ -65,20 +64,22 @@ impl VisualVideoProcessor {
             )
             .build();
 
-        // Create queue for display path (simple playback for now)
+        // Create file output path
         let queue2 = gst::ElementFactory::make("queue").build()?;
         let videoconvert2 = gst::ElementFactory::make("videoconvert").build()?;
-        
-        // Use fakesink for now to avoid macOS video window issues
-        // This allows the demo to run and show detection output in terminal
-        let videosink = gst::ElementFactory::make("fakesink")
-            .property("sync", true)
+        let x264enc = gst::ElementFactory::make("x264enc").build()?;
+        let mp4mux = gst::ElementFactory::make("mp4mux").build()?;
+        let filesink = gst::ElementFactory::make("filesink")
+            .property("location", output_path)
             .build()?;
+
+        // Configure x264enc for basic encoding (remove problematic properties)
 
         // Add elements to pipeline
         pipeline.add_many(&[
             &filesrc, &decodebin, &videoconvert1, &videoscale, &capsfilter, &tee,
-            &queue1, appsink.upcast_ref(), &queue2, &videoconvert2, &videosink
+            &queue1, appsink.upcast_ref(),
+            &queue2, &videoconvert2, &x264enc, &mp4mux, &filesink
         ])?;
 
         // Link static elements
@@ -88,8 +89,8 @@ impl VisualVideoProcessor {
         // Link inference path
         gst::Element::link_many(&[&tee, &queue1, appsink.upcast_ref()])?;
         
-        // Link display path
-        gst::Element::link_many(&[&tee, &queue2, &videoconvert2, &videosink])?;
+        // Link file output path
+        gst::Element::link_many(&[&tee, &queue2, &videoconvert2, &x264enc, &mp4mux, &filesink])?;
 
         // Setup dynamic linking for decodebin
         let videoconvert1_clone = videoconvert1.clone();
@@ -117,6 +118,7 @@ impl VisualVideoProcessor {
         let inference_clone = inference_backend.clone();
         let preprocessor_clone = preprocessor.clone();
         let detections_clone = detections.clone();
+        
         appsink.set_callbacks(
             gst_app::AppSinkCallbacks::builder()
                 .new_sample(move |appsink| {
@@ -131,18 +133,21 @@ impl VisualVideoProcessor {
                                         &preprocessor_clone,
                                     ) {
                                         Ok(new_detections) => {
-                                            println!("Found {} detections", new_detections.len());
+                                            println!("Frame processed: {} detections", new_detections.len());
                                             for detection in &new_detections {
-                                                let class_name = if detection.class_id < COCO_NAMES.len() as i32 {
+                                                let class_name = if (detection.class_id as usize) < COCO_NAMES.len() {
                                                     COCO_NAMES[detection.class_id as usize]
                                                 } else {
                                                     "unknown"
                                                 };
-                                                println!("  {}: {:.1}% at ({:.1}, {:.1}, {:.1}, {:.1})", 
-                                                    class_name, detection.score, 
-                                                    detection.x1, detection.y1, detection.x2, detection.y2);
+                                                println!("  - {}: {:.2}% at ({:.0}, {:.0}, {:.0}, {:.0})", 
+                                                    class_name,
+                                                    detection.score * 100.0,
+                                                    detection.x1, detection.y1,
+                                                    detection.width(), detection.height());
                                             }
-                                            // Update shared detections for future overlay
+                                            
+                                            // Update shared detections
                                             if let Ok(mut detections_guard) = detections_clone.lock() {
                                                 *detections_guard = new_detections;
                                             }
@@ -158,9 +163,6 @@ impl VisualVideoProcessor {
                 .build(),
         );
 
-        // Note: For now, we're just displaying the video and printing detections
-        // Future enhancement: implement cairo overlay for bounding box rendering
-
         Ok(Self {
             pipeline,
             inference_backend,
@@ -170,8 +172,7 @@ impl VisualVideoProcessor {
     }
 
     pub fn run(&self) -> Result<()> {
-        println!("Starting visual processing with YOLO detection...");
-        println!("Video frames will be processed and detections shown in terminal");
+        println!("Starting file output processing...");
         
         // Start playing
         self.pipeline.set_state(gst::State::Playing)?;
@@ -181,14 +182,11 @@ impl VisualVideoProcessor {
         for msg in bus.iter_timed(gst::ClockTime::NONE) {
             match msg.view() {
                 gst::MessageView::Eos(..) => {
-                    println!("End of stream - video processing complete");
+                    println!("End of stream - file output complete");
                     break;
                 }
                 gst::MessageView::Error(err) => {
                     eprintln!("Error: {}", err.error());
-                    if let Some(debug) = err.debug() {
-                        eprintln!("Debug info: {}", debug);
-                    }
                     break;
                 }
                 gst::MessageView::StateChanged(state_changed) => {
@@ -203,7 +201,6 @@ impl VisualVideoProcessor {
 
         // Stop pipeline
         self.pipeline.set_state(gst::State::Null)?;
-        println!("Visual demo completed");
         Ok(())
     }
 
@@ -264,10 +261,11 @@ impl VisualVideoProcessor {
 
         match result {
             TaskOutput::Detections(detections) => {
-                // Filter detections with reasonable confidence and normalize coordinates
+                // Filter detections with reasonable confidence
                 let filtered_detections: Vec<Detection> = detections
                     .into_iter()
                     .filter(|d| d.score > 50.0) // Filter by confidence
+                    .take(10) // Limit to top 10 detections to avoid overlay clutter
                     .collect();
                 
                 Ok(filtered_detections)
@@ -275,19 +273,23 @@ impl VisualVideoProcessor {
         }
     }
 
-    // TODO: Implement overlay rendering with cairo in future enhancement
 }
 
-pub fn run_visual_demo() -> Result<()> {
+pub fn run_file_output_demo(output_path: Option<&str>) -> Result<()> {
     // Use sample video file
     let mut config = AppConfig::default();
     config.pipeline.video_source = "assets/sample.mp4".to_string();
     config.inference.model_path = "models/yolov8n.onnx".into();
 
-    println!("Starting visual YOLO demo with bounding boxes on {}", config.pipeline.video_source);
+    let output_file = output_path.unwrap_or("output_with_detections.mp4");
     
-    let processor = VisualVideoProcessor::new(&config)?;
+    println!("Starting file output YOLO demo");
+    println!("Input: {}", config.pipeline.video_source);
+    println!("Output: {}", output_file);
+    
+    let processor = FileOutputProcessor::new(&config, output_file)?;
     processor.run()?;
-
+    
+    println!("Video with detections saved to: {}", output_file);
     Ok(())
 }

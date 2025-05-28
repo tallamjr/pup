@@ -1,5 +1,5 @@
-//! Visual demo application with bounding box overlay
-//! Shows video with YOLO detections rendered as bounding boxes with labels
+//! Detection demo that processes video and saves detection results to a file
+//! This processes frames and saves detected objects to a text file
 
 use crate::config::AppConfig;
 use crate::inference::{InferenceBackend, OrtBackend, TaskOutput};
@@ -11,98 +11,74 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
 use gstreamer_video as gst_video;
+use std::fs::File;
+use std::io::Write;
 use std::sync::{Arc, Mutex};
-//use cairo_rs::{Context, FontSlant, FontWeight};
 
-pub struct VisualVideoProcessor {
+pub struct DetectionProcessor {
     pipeline: gst::Pipeline,
     inference_backend: Arc<Mutex<Box<dyn InferenceBackend>>>,
     preprocessor: Preprocessor,
     detections: Arc<Mutex<Vec<Detection>>>,
+    output_file: Arc<Mutex<File>>,
+    frame_count: Arc<Mutex<u32>>,
 }
 
-impl VisualVideoProcessor {
-    pub fn new(config: &AppConfig) -> Result<Self> {
+impl DetectionProcessor {
+    pub fn new(config: &AppConfig, output_path: &str) -> Result<Self> {
         // Initialize GStreamer
         gst::init()?;
 
-        // Create pipeline
-        let pipeline = gst::Pipeline::new();
+        let pipeline = gst::Pipeline::builder().name("detection-pipeline").build();
 
         // Create elements
         let filesrc = gst::ElementFactory::make("filesrc")
             .property("location", &config.pipeline.video_source)
             .build()?;
-
+        
         let decodebin = gst::ElementFactory::make("decodebin").build()?;
-        let videoconvert1 = gst::ElementFactory::make("videoconvert").build()?;
+        let videoconvert = gst::ElementFactory::make("videoconvert").build()?;
         let videoscale = gst::ElementFactory::make("videoscale").build()?;
-        
-        // Create capsfilter for standardized format
         let capsfilter = gst::ElementFactory::make("capsfilter")
-            .property(
-                "caps",
-                gst::Caps::builder("video/x-raw")
-                    .field("format", "RGB")
-                    .field("width", 640i32)
-                    .field("height", 640i32)
-                    .build(),
-            )
+            .property("caps", &gst::Caps::builder("video/x-raw")
+                .field("format", "RGB")
+                .field("width", 640)
+                .field("height", 480)
+                .build())
             .build()?;
-
-        // Create tee to split the stream
-        let tee = gst::ElementFactory::make("tee").build()?;
         
-        // Create queue for inference path
-        let queue1 = gst::ElementFactory::make("queue").build()?;
         let appsink = gst_app::AppSink::builder()
-            .caps(
-                &gst::Caps::builder("video/x-raw")
-                    .field("format", "RGB")
-                    .field("width", 640i32)
-                    .field("height", 640i32)
-                    .build(),
-            )
+            .caps(&gst::Caps::builder("video/x-raw")
+                .field("format", "RGB")
+                .field("width", 640)
+                .field("height", 480)
+                .build())
             .build();
-
-        // Create queue for display path (simple playback for now)
-        let queue2 = gst::ElementFactory::make("queue").build()?;
-        let videoconvert2 = gst::ElementFactory::make("videoconvert").build()?;
-        
-        // Use fakesink for now to avoid macOS video window issues
-        // This allows the demo to run and show detection output in terminal
-        let videosink = gst::ElementFactory::make("fakesink")
-            .property("sync", true)
-            .build()?;
 
         // Add elements to pipeline
         pipeline.add_many(&[
-            &filesrc, &decodebin, &videoconvert1, &videoscale, &capsfilter, &tee,
-            &queue1, appsink.upcast_ref(), &queue2, &videoconvert2, &videosink
+            &filesrc, &decodebin, &videoconvert, &videoscale, &capsfilter, 
+            appsink.upcast_ref()
         ])?;
 
         // Link static elements
         filesrc.link(&decodebin)?;
-        gst::Element::link_many(&[&videoconvert1, &videoscale, &capsfilter, &tee])?;
-        
-        // Link inference path
-        gst::Element::link_many(&[&tee, &queue1, appsink.upcast_ref()])?;
-        
-        // Link display path
-        gst::Element::link_many(&[&tee, &queue2, &videoconvert2, &videosink])?;
+        gst::Element::link_many(&[&videoconvert, &videoscale, &capsfilter, appsink.upcast_ref()])?;
 
-        // Setup dynamic linking for decodebin
-        let videoconvert1_clone = videoconvert1.clone();
-        decodebin.connect_pad_added(move |_, src_pad| {
-            let caps = src_pad.current_caps().unwrap();
-            let structure = caps.structure(0).unwrap();
-            
-            if structure.name().starts_with("video/") {
-                let sink_pad = videoconvert1_clone.static_pad("sink").unwrap();
-                if src_pad.link(&sink_pad).is_err() {
-                    eprintln!("Failed to link decodebin to videoconvert");
+        // Connect decodebin pad-added signal
+        let videoconvert_clone = videoconvert.clone();
+        decodebin.connect("pad-added", false, move |values| {
+            let pad = values[1].get::<gst::Pad>().unwrap();
+            if let Some(caps) = pad.current_caps() {
+                let structure = caps.structure(0).unwrap();
+                if structure.name().starts_with("video/") {
+                    let sink_pad = videoconvert_clone.static_pad("sink").unwrap();
+                    if !sink_pad.is_linked() {
+                        let _ = pad.link(&sink_pad);
+                    }
                 }
             }
+            None
         });
 
         // Setup inference backend
@@ -112,11 +88,18 @@ impl VisualVideoProcessor {
         let inference_backend: Arc<Mutex<Box<dyn InferenceBackend>>> = Arc::new(Mutex::new(backend));
         let preprocessor = Preprocessor::default();
         let detections = Arc::new(Mutex::new(Vec::new()));
+        
+        // Create output file
+        let output_file = Arc::new(Mutex::new(File::create(output_path)?));
+        let frame_count = Arc::new(Mutex::new(0u32));
 
         // Setup appsink callback for processing frames
         let inference_clone = inference_backend.clone();
         let preprocessor_clone = preprocessor.clone();
         let detections_clone = detections.clone();
+        let output_file_clone = output_file.clone();
+        let frame_count_clone = frame_count.clone();
+        
         appsink.set_callbacks(
             gst_app::AppSinkCallbacks::builder()
                 .new_sample(move |appsink| {
@@ -124,6 +107,13 @@ impl VisualVideoProcessor {
                         if let Some(buffer) = sample.buffer() {
                             if let Some(caps) = sample.caps() {
                                 if let Ok(info) = gst_video::VideoInfo::from_caps(&caps) {
+                                    // Increment frame count
+                                    let current_frame = {
+                                        let mut count = frame_count_clone.lock().unwrap();
+                                        *count += 1;
+                                        *count
+                                    };
+
                                     match Self::process_sample_static(
                                         &buffer,
                                         &info,
@@ -131,18 +121,32 @@ impl VisualVideoProcessor {
                                         &preprocessor_clone,
                                     ) {
                                         Ok(new_detections) => {
-                                            println!("Found {} detections", new_detections.len());
-                                            for detection in &new_detections {
-                                                let class_name = if detection.class_id < COCO_NAMES.len() as i32 {
-                                                    COCO_NAMES[detection.class_id as usize]
-                                                } else {
-                                                    "unknown"
-                                                };
-                                                println!("  {}: {:.1}% at ({:.1}, {:.1}, {:.1}, {:.1})", 
-                                                    class_name, detection.score, 
-                                                    detection.x1, detection.y1, detection.x2, detection.y2);
+                                            println!("Frame {}: {} detections", current_frame, new_detections.len());
+                                            
+                                            // Write detections to file
+                                            if let Ok(mut file) = output_file_clone.lock() {
+                                                let _ = writeln!(file, "Frame {}: {} detections", current_frame, new_detections.len());
+                                                
+                                                for detection in &new_detections {
+                                                    let class_name = if (detection.class_id as usize) < COCO_NAMES.len() {
+                                                        COCO_NAMES[detection.class_id as usize]
+                                                    } else {
+                                                        "unknown"
+                                                    };
+                                                    let detection_line = format!(
+                                                        "  - {}: {:.2}% at ({:.0}, {:.0}, {:.0}, {:.0})",
+                                                        class_name,
+                                                        detection.score * 100.0,
+                                                        detection.x1, detection.y1,
+                                                        detection.width(), detection.height()
+                                                    );
+                                                    println!("{}", detection_line);
+                                                    let _ = writeln!(file, "{}", detection_line);
+                                                }
+                                                let _ = file.flush();
                                             }
-                                            // Update shared detections for future overlay
+                                            
+                                            // Update shared detections
                                             if let Ok(mut detections_guard) = detections_clone.lock() {
                                                 *detections_guard = new_detections;
                                             }
@@ -158,20 +162,18 @@ impl VisualVideoProcessor {
                 .build(),
         );
 
-        // Note: For now, we're just displaying the video and printing detections
-        // Future enhancement: implement cairo overlay for bounding box rendering
-
         Ok(Self {
             pipeline,
             inference_backend,
             preprocessor,
             detections,
+            output_file,
+            frame_count,
         })
     }
 
     pub fn run(&self) -> Result<()> {
-        println!("Starting visual processing with YOLO detection...");
-        println!("Video frames will be processed and detections shown in terminal");
+        println!("Starting detection processing...");
         
         // Start playing
         self.pipeline.set_state(gst::State::Playing)?;
@@ -181,14 +183,11 @@ impl VisualVideoProcessor {
         for msg in bus.iter_timed(gst::ClockTime::NONE) {
             match msg.view() {
                 gst::MessageView::Eos(..) => {
-                    println!("End of stream - video processing complete");
+                    println!("End of stream - processing complete");
                     break;
                 }
                 gst::MessageView::Error(err) => {
                     eprintln!("Error: {}", err.error());
-                    if let Some(debug) = err.debug() {
-                        eprintln!("Debug info: {}", debug);
-                    }
                     break;
                 }
                 gst::MessageView::StateChanged(state_changed) => {
@@ -203,7 +202,11 @@ impl VisualVideoProcessor {
 
         // Stop pipeline
         self.pipeline.set_state(gst::State::Null)?;
-        println!("Visual demo completed");
+        
+        // Final stats
+        let total_frames = *self.frame_count.lock().unwrap();
+        println!("Processed {} frames total", total_frames);
+        
         Ok(())
     }
 
@@ -264,30 +267,30 @@ impl VisualVideoProcessor {
 
         match result {
             TaskOutput::Detections(detections) => {
-                // Filter detections with reasonable confidence and normalize coordinates
-                let filtered_detections: Vec<Detection> = detections
-                    .into_iter()
-                    .filter(|d| d.score > 50.0) // Filter by confidence
-                    .collect();
-                
-                Ok(filtered_detections)
+                // Filter detections with reasonable confidence
+                Ok(detections.into_iter().filter(|d| d.score > 0.5).collect())
             }
+            _ => Ok(Vec::new()),
         }
     }
-
-    // TODO: Implement overlay rendering with cairo in future enhancement
 }
 
-pub fn run_visual_demo() -> Result<()> {
+pub fn run_detection_demo(output_path: Option<&str>) -> Result<()> {
     // Use sample video file
     let mut config = AppConfig::default();
     config.pipeline.video_source = "assets/sample.mp4".to_string();
     config.inference.model_path = "models/yolov8n.onnx".into();
 
-    println!("Starting visual YOLO demo with bounding boxes on {}", config.pipeline.video_source);
+    let output_file = output_path.unwrap_or("assets/detections.txt");
     
-    let processor = VisualVideoProcessor::new(&config)?;
+    println!("Starting YOLO detection demo");
+    println!("Input: {}", config.pipeline.video_source);
+    println!("Output: {}", output_file);
+    
+    let processor = DetectionProcessor::new(&config, output_file)?;
     processor.run()?;
-
+    
+    println!("Detection results saved to: {}", output_file);
+    
     Ok(())
 }

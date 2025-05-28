@@ -7,6 +7,9 @@ pub mod pupinference;
 pub mod pupoverlay;
 pub mod simple_demo;
 pub mod visual_demo;
+pub mod simple_visual_demo;
+pub mod file_output_demo;
+pub mod detection_demo;
 
 // Plugin registration following gstreamer-rs patterns
 gst::plugin_define!(

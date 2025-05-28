@@ -125,62 +125,73 @@ impl ModelPostProcessor for YoloPostProcessor {
         output: &[f32],
         input_shape: &[usize],
     ) -> Result<Vec<Detection>, InferenceError> {
-        // YOLO output format: [batch, 84, num_boxes] where 84 = 4 (bbox) + 80 (classes)
-        if output.len() < 84 {
+        // YOLOv8 output format: [1, 84, 8400] -> flattened to [84 * 8400]
+        // where 84 = 4 (bbox coords) + 80 (class scores)
+        // Each of the 8400 predictions corresponds to an anchor point
+        
+        if output.len() != 84 * 8400 {
             return Err(InferenceError::InvalidOutputFormat(
-                "Output too small for YOLO format".to_string(),
+                format!("Expected YOLOv8 output size 84*8400={}, got {}", 84 * 8400, output.len())
             ));
         }
 
-        let num_boxes = output.len() / 84;
+        let num_predictions = 8400;
         let mut detections = Vec::new();
 
-        // Assuming input is 640x640 for scaling
-        let scale_x = if input_shape.len() >= 4 {
+        // Get model input dimensions
+        let model_width = if input_shape.len() >= 4 {
             input_shape[3] as f32
         } else {
             640.0
         };
-        let scale_y = if input_shape.len() >= 3 {
+        let model_height = if input_shape.len() >= 3 {
             input_shape[2] as f32
         } else {
             640.0
         };
 
-        for i in 0..num_boxes {
-            let base_idx = i * 84;
+        // YOLOv8 output is in format [84, 8400], so we need to transpose indexing
+        for i in 0..num_predictions {
+            // Get bbox coordinates: output[0..4, i]
+            let cx = output[i];                    // center_x at index [0, i]
+            let cy = output[num_predictions + i];  // center_y at index [1, i]  
+            let w = output[2 * num_predictions + i]; // width at index [2, i]
+            let h = output[3 * num_predictions + i]; // height at index [3, i]
 
-            // Extract bounding box (center_x, center_y, width, height)
-            let cx = output[base_idx] * scale_x;
-            let cy = output[base_idx + 1] * scale_y;
-            let w = output[base_idx + 2] * scale_x;
-            let h = output[base_idx + 3] * scale_y;
-
-            // Convert to corner format
+            // Convert from center format to corner format
             let x1 = cx - w * 0.5;
             let y1 = cy - h * 0.5;
             let x2 = cx + w * 0.5;
             let y2 = cy + h * 0.5;
 
-            // Find best class and score
+            // Skip detections with invalid coordinates
+            if x1 < 0.0 || y1 < 0.0 || x2 > model_width || y2 > model_height || x1 >= x2 || y1 >= y2 {
+                continue;
+            }
+
+            // Find best class and confidence score from class predictions
             let mut best_score = 0.0f32;
             let mut best_class = 0i32;
 
             for class_idx in 0..self.num_classes {
-                let score = output[base_idx + 4 + class_idx];
+                // Class scores start at index [4, i] through [83, i]
+                let score = output[(4 + class_idx) * num_predictions + i];
                 if score > best_score {
                     best_score = score;
                     best_class = class_idx as i32;
                 }
             }
 
-            // Only create detection if we have a positive score
-            if best_score > 0.0 {
+            // Apply strict confidence threshold to reduce false positives
+            if best_score > 0.5 { // Much higher threshold
                 detections.push(Detection::new(x1, y1, x2, y2, best_score, best_class));
             }
         }
 
-        Ok(detections)
+        // Apply Non-Maximum Suppression to remove overlapping detections
+        let detections_after_nms = self.apply_nms(detections, self.iou_threshold);
+        
+        Ok(detections_after_nms)
     }
 
     fn apply_nms(&self, detections: Vec<Detection>, iou_threshold: f32) -> Vec<Detection> {
@@ -223,13 +234,13 @@ mod tests {
     fn test_yolo_output_processing() {
         let processor = YoloPostProcessor::new(80, 0.5);
 
-        // Create mock YOLO output: one detection with high confidence for class 0
+        // Create mock YOLOv8 output: one detection with high confidence for class 0
         let mut output = vec![0.0f32; 84];
-        output[0] = 0.5; // cx (normalized)
-        output[1] = 0.5; // cy (normalized)
-        output[2] = 0.2; // width (normalized)
-        output[3] = 0.2; // height (normalized)
-        output[4] = 0.9; // confidence for class 0
+        output[0] = 320.0; // cx in pixels (center at 320)
+        output[1] = 320.0; // cy in pixels (center at 320)
+        output[2] = 128.0; // width in pixels
+        output[3] = 128.0; // height in pixels
+        output[4] = 0.9;   // confidence for class 0
 
         let input_shape = vec![1, 3, 640, 640];
         let detections = processor.process_raw_output(&output, &input_shape).unwrap();
@@ -239,10 +250,10 @@ mod tests {
         assert_eq!(det.class_id, 0);
         assert_eq!(det.score, 0.9);
 
-        // Check bounding box conversion (center 320,320 with size 128x128 -> corners 256,256 to 384,384)
-        assert!((det.x1 - 256.0).abs() < 1.0);
-        assert!((det.y1 - 256.0).abs() < 1.0);
-        assert!((det.x2 - 384.0).abs() < 1.0);
-        assert!((det.y2 - 384.0).abs() < 1.0);
+        // Check bounding box conversion (center 320,320 with size 128x128 -> corners 256,256 to 448,448)
+        assert!((det.x1 - 256.0).abs() < 1.0); // 320 - 128/2 = 256
+        assert!((det.y1 - 256.0).abs() < 1.0); // 320 - 128/2 = 256
+        assert!((det.x2 - 384.0).abs() < 1.0); // 320 + 128/2 = 384
+        assert!((det.y2 - 384.0).abs() < 1.0); // 320 + 128/2 = 384
     }
 }

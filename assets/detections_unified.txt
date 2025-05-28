@@ -1,0 +1,676 @@
+Frame 1: 3 detections
+  - car: 75.83% at (0, 507, 38, 66)
+Frame 1: 3 detections
+  - truck: 68.12% at (1, 438, 109, 120)
+Frame 1: 3 detections
+  - car: 61.57% at (120, 484, 36, 34)
+Frame 2: 2 detections
+  - truck: 74.85% at (4, 438, 106, 124)
+Frame 2: 2 detections
+  - car: 73.88% at (0, 508, 34, 65)
+Frame 3: 3 detections
+  - car: 70.61% at (0, 507, 31, 67)
+Frame 3: 3 detections
+  - truck: 70.17% at (1, 437, 108, 126)
+Frame 3: 3 detections
+  - car: 51.90% at (113, 484, 41, 39)
+Frame 4: 3 detections
+  - truck: 83.35% at (1, 437, 109, 126)
+Frame 4: 3 detections
+  - car: 69.97% at (0, 509, 28, 64)
+Frame 4: 3 detections
+  - car: 64.75% at (111, 484, 43, 40)
+Frame 5: 3 detections
+  - truck: 64.11% at (0, 437, 110, 129)
+Frame 5: 3 detections
+  - car: 57.81% at (0, 512, 26, 62)
+Frame 5: 3 detections
+  - car: 56.35% at (111, 484, 44, 40)
+Frame 6: 1 detections
+  - truck: 56.88% at (0, 438, 165, 130)
+Frame 7: 2 detections
+  - truck: 83.54% at (0, 436, 100, 130)
+Frame 7: 2 detections
+  - car: 50.78% at (113, 485, 40, 37)
+Frame 8: 2 detections
+  - truck: 74.85% at (0, 436, 97, 136)
+Frame 8: 2 detections
+  - car: 50.93% at (104, 485, 48, 41)
+Frame 9: 2 detections
+  - truck: 65.87% at (0, 436, 103, 136)
+Frame 9: 2 detections
+  - car: 57.28% at (104, 484, 45, 42)
+Frame 10: 2 detections
+  - truck: 68.80% at (0, 436, 90, 135)
+Frame 10: 2 detections
+  - car: 55.66% at (101, 484, 46, 42)
+Frame 11: 1 detections
+  - car: 55.32% at (100, 485, 47, 41)
+Frame 12: 2 detections
+  - truck: 67.77% at (0, 435, 82, 136)
+Frame 12: 2 detections
+  - car: 57.47% at (96, 484, 50, 44)
+Frame 13: 2 detections
+  - truck: 70.61% at (0, 434, 79, 138)
+Frame 13: 2 detections
+  - car: 58.79% at (95, 485, 46, 41)
+Frame 14: 2 detections
+  - truck: 82.81% at (0, 434, 75, 140)
+Frame 14: 2 detections
+  - car: 52.44% at (97, 484, 42, 41)
+Frame 15: 2 detections
+  - truck: 77.69% at (0, 433, 74, 140)
+Frame 15: 2 detections
+  - car: 56.74% at (97, 484, 42, 42)
+Frame 16: 1 detections
+  - truck: 65.28% at (0, 432, 76, 138)
+Frame 17: 1 detections
+  - truck: 60.01% at (0, 432, 81, 136)
+Frame 18: 1 detections
+  - truck: 71.78% at (0, 432, 79, 136)
+Frame 19: 1 detections
+  - truck: 54.44% at (0, 432, 65, 134)
+Frame 21: 2 detections
+  - truck: 65.92% at (0, 432, 57, 135)
+Frame 21: 2 detections
+  - car: 60.01% at (80, 485, 50, 45)
+Frame 22: 2 detections
+  - car: 63.62% at (75, 486, 53, 48)
+Frame 22: 2 detections
+  - truck: 62.50% at (0, 432, 54, 134)
+Frame 23: 2 detections
+  - truck: 62.89% at (0, 432, 52, 134)
+Frame 23: 2 detections
+  - car: 58.11% at (75, 486, 50, 47)
+Frame 26: 1 detections
+  - car: 50.29% at (130, 486, 24, 31)
+Frame 33: 1 detections
+  - car: 57.91% at (124, 487, 32, 32)
+Frame 37: 2 detections
+  - car: 56.01% at (120, 488, 37, 35)
+Frame 37: 2 detections
+  - car: 50.59% at (67, 492, 46, 42)
+Frame 38: 1 detections
+  - car: 50.98% at (120, 488, 37, 35)
+Frame 39: 2 detections
+  - car: 57.71% at (47, 492, 65, 55)
+Frame 39: 2 detections
+  - car: 56.54% at (121, 489, 36, 34)
+Frame 40: 2 detections
+  - car: 57.91% at (120, 488, 36, 35)
+Frame 40: 2 detections
+  - car: 57.18% at (46, 492, 65, 57)
+Frame 41: 2 detections
+  - car: 71.48% at (46, 492, 65, 58)
+Frame 41: 2 detections
+  - car: 54.20% at (120, 488, 36, 34)
+Frame 42: 2 detections
+  - car: 66.46% at (44, 492, 65, 56)
+Frame 42: 2 detections
+  - car: 59.57% at (119, 488, 39, 36)
+Frame 43: 3 detections
+  - car: 73.97% at (41, 492, 69, 58)
+Frame 43: 3 detections
+  - car: 59.42% at (118, 488, 39, 37)
+Frame 43: 3 detections
+  - bus: 50.73% at (0, 460, 145, 96)
+Frame 44: 2 detections
+  - car: 62.11% at (39, 492, 68, 60)
+Frame 44: 2 detections
+  - car: 58.35% at (117, 488, 39, 37)
+Frame 45: 3 detections
+  - car: 71.73% at (40, 492, 69, 62)
+Frame 45: 3 detections
+  - bus: 62.50% at (0, 459, 149, 95)
+Frame 45: 3 detections
+  - car: 56.40% at (116, 488, 40, 37)
+Frame 46: 1 detections
+  - car: 54.49% at (114, 488, 42, 38)
+Frame 47: 3 detections
+  - car: 70.17% at (37, 491, 69, 66)
+Frame 47: 3 detections
+  - car: 62.40% at (116, 489, 40, 38)
+Frame 47: 3 detections
+  - bus: 59.13% at (0, 459, 147, 98)
+Frame 48: 3 detections
+  - car: 75.88% at (34, 491, 70, 66)
+Frame 48: 3 detections
+  - bus: 63.09% at (0, 459, 147, 97)
+Frame 48: 3 detections
+  - car: 53.76% at (115, 489, 41, 36)
+Frame 49: 3 detections
+  - car: 77.39% at (33, 491, 71, 67)
+Frame 49: 3 detections
+  - bus: 61.43% at (0, 458, 146, 98)
+Frame 49: 3 detections
+  - car: 53.76% at (113, 489, 42, 36)
+Frame 50: 3 detections
+  - bus: 71.34% at (0, 458, 146, 98)
+Frame 50: 3 detections
+  - car: 68.21% at (33, 491, 70, 64)
+Frame 50: 3 detections
+  - car: 50.49% at (112, 489, 43, 36)
+Frame 51: 2 detections
+  - bus: 73.54% at (0, 458, 144, 101)
+Frame 51: 2 detections
+  - car: 65.82% at (30, 491, 74, 70)
+Frame 52: 3 detections
+  - car: 73.58% at (28, 491, 74, 70)
+Frame 52: 3 detections
+  - bus: 63.72% at (0, 457, 144, 100)
+Frame 52: 3 detections
+  - car: 53.61% at (111, 488, 45, 38)
+Frame 53: 3 detections
+  - bus: 70.12% at (0, 457, 144, 101)
+Frame 53: 3 detections
+  - car: 57.37% at (28, 491, 73, 71)
+Frame 53: 3 detections
+  - car: 51.81% at (110, 488, 46, 38)
+Frame 54: 3 detections
+  - bus: 73.29% at (0, 457, 147, 100)
+Frame 54: 3 detections
+  - car: 63.18% at (24, 491, 76, 71)
+Frame 54: 3 detections
+  - car: 60.99% at (110, 489, 45, 37)
+Frame 55: 3 detections
+  - car: 74.90% at (24, 490, 75, 70)
+Frame 55: 3 detections
+  - bus: 66.55% at (0, 457, 149, 100)
+Frame 55: 3 detections
+  - car: 58.01% at (108, 488, 46, 37)
+Frame 56: 3 detections
+  - car: 76.12% at (22, 490, 76, 70)
+Frame 56: 3 detections
+  - bus: 66.11% at (0, 457, 148, 98)
+Frame 56: 3 detections
+  - car: 55.76% at (108, 489, 45, 37)
+Frame 57: 2 detections
+  - car: 75.15% at (19, 490, 79, 72)
+Frame 57: 2 detections
+  - bus: 64.31% at (0, 456, 149, 100)
+Frame 58: 2 detections
+  - car: 74.02% at (19, 490, 77, 70)
+Frame 58: 2 detections
+  - car: 59.77% at (107, 488, 44, 36)
+Frame 59: 2 detections
+  - car: 72.22% at (16, 490, 79, 73)
+Frame 59: 2 detections
+  - bus: 54.20% at (0, 456, 150, 101)
+Frame 60: 2 detections
+  - car: 83.89% at (15, 490, 79, 73)
+Frame 60: 2 detections
+  - car: 58.15% at (104, 489, 45, 38)
+Frame 61: 1 detections
+  - car: 80.18% at (13, 490, 79, 75)
+Frame 62: 2 detections
+  - car: 75.98% at (10, 490, 80, 75)
+Frame 62: 2 detections
+  - car: 53.08% at (103, 489, 47, 40)
+Frame 63: 2 detections
+  - car: 81.93% at (8, 491, 83, 74)
+Frame 63: 2 detections
+  - car: 61.23% at (101, 489, 48, 40)
+Frame 64: 2 detections
+  - car: 81.15% at (6, 489, 84, 79)
+Frame 64: 2 detections
+  - car: 60.60% at (102, 489, 48, 40)
+Frame 65: 1 detections
+  - car: 78.52% at (4, 490, 84, 80)
+Frame 66: 2 detections
+  - car: 82.67% at (2, 489, 86, 80)
+Frame 66: 2 detections
+  - car: 59.47% at (99, 489, 48, 40)
+Frame 67: 2 detections
+  - car: 81.40% at (1, 491, 87, 80)
+Frame 67: 2 detections
+  - car: 59.47% at (99, 489, 47, 41)
+Frame 68: 2 detections
+  - car: 79.59% at (1, 490, 81, 78)
+Frame 68: 2 detections
+  - car: 66.94% at (98, 489, 48, 42)
+Frame 69: 2 detections
+  - car: 77.49% at (1, 492, 81, 79)
+Frame 69: 2 detections
+  - car: 67.29% at (96, 490, 50, 42)
+Frame 70: 1 detections
+  - car: 65.62% at (98, 490, 47, 40)
+Frame 71: 2 detections
+  - car: 67.82% at (0, 492, 77, 78)
+Frame 71: 2 detections
+  - car: 55.42% at (94, 490, 50, 40)
+Frame 72: 2 detections
+  - car: 63.33% at (0, 494, 76, 74)
+Frame 72: 2 detections
+  - car: 54.54% at (101, 491, 43, 36)
+Frame 73: 2 detections
+  - car: 65.67% at (0, 494, 73, 72)
+Frame 73: 2 detections
+  - car: 56.93% at (104, 491, 39, 36)
+Frame 74: 2 detections
+  - car: 74.22% at (0, 494, 68, 68)
+Frame 74: 2 detections
+  - car: 59.28% at (92, 491, 52, 43)
+Frame 75: 2 detections
+  - car: 74.95% at (1, 493, 73, 69)
+Frame 75: 2 detections
+  - car: 55.03% at (92, 491, 51, 42)
+Frame 76: 2 detections
+  - car: 74.32% at (0, 493, 73, 71)
+Frame 76: 2 detections
+  - car: 55.22% at (90, 491, 52, 44)
+Frame 77: 2 detections
+  - car: 72.12% at (0, 496, 58, 74)
+Frame 77: 2 detections
+  - car: 58.94% at (91, 492, 51, 43)
+Frame 78: 2 detections
+  - car: 80.13% at (0, 495, 63, 75)
+Frame 78: 2 detections
+  - car: 61.38% at (88, 492, 52, 43)
+Frame 79: 2 detections
+  - car: 65.48% at (0, 495, 64, 75)
+Frame 79: 2 detections
+  - car: 64.36% at (100, 492, 39, 34)
+Frame 80: 2 detections
+  - car: 53.56% at (0, 498, 32, 72)
+Frame 80: 2 detections
+  - car: 51.95% at (98, 493, 41, 36)
+Frame 81: 2 detections
+  - car: 73.39% at (83, 494, 56, 46)
+Frame 81: 2 detections
+  - car: 65.23% at (0, 496, 57, 76)
+Frame 82: 2 detections
+  - car: 77.10% at (80, 495, 57, 47)
+Frame 82: 2 detections
+  - car: 62.99% at (0, 496, 61, 79)
+Frame 83: 2 detections
+  - car: 72.31% at (80, 496, 56, 47)
+Frame 83: 2 detections
+  - car: 53.37% at (0, 496, 51, 76)
+Frame 84: 3 detections
+  - car: 67.48% at (79, 496, 55, 46)
+Frame 84: 3 detections
+  - car: 51.56% at (155, 486, 24, 27)
+Frame 84: 3 detections
+  - bus: 50.98% at (0, 457, 129, 116)
+Frame 85: 2 detections
+  - car: 57.81% at (154, 487, 24, 26)
+Frame 85: 2 detections
+  - car: 50.39% at (96, 495, 38, 36)
+Frame 86: 3 detections
+  - car: 63.13% at (78, 496, 56, 46)
+Frame 86: 3 detections
+  - car: 56.20% at (153, 488, 25, 26)
+Frame 86: 3 detections
+  - car: 52.98% at (0, 498, 47, 77)
+Frame 87: 2 detections
+  - car: 66.85% at (75, 496, 57, 48)
+Frame 87: 2 detections
+  - bus: 53.96% at (0, 456, 121, 98)
+Frame 88: 3 detections
+  - car: 77.64% at (74, 496, 56, 48)
+Frame 88: 3 detections
+  - bus: 61.67% at (0, 456, 120, 100)
+Frame 88: 3 detections
+  - car: 55.81% at (151, 489, 28, 28)
+Frame 89: 4 detections
+  - car: 76.61% at (72, 496, 58, 49)
+Frame 89: 4 detections
+  - bus: 65.82% at (0, 456, 120, 110)
+Frame 89: 4 detections
+  - car: 60.50% at (150, 488, 29, 30)
+Frame 89: 4 detections
+  - car: 55.22% at (0, 498, 41, 75)
+Frame 90: 4 detections
+  - car: 75.63% at (71, 496, 59, 50)
+Frame 90: 4 detections
+  - bus: 63.28% at (0, 456, 119, 107)
+Frame 90: 4 detections
+  - car: 61.08% at (0, 499, 35, 72)
+Frame 90: 4 detections
+  - car: 57.37% at (150, 488, 30, 30)
+Frame 91: 4 detections
+  - car: 82.23% at (70, 496, 59, 50)
+Frame 91: 4 detections
+  - car: 79.00% at (0, 499, 34, 73)
+Frame 91: 4 detections
+  - bus: 78.27% at (0, 456, 117, 98)
+Frame 91: 4 detections
+  - car: 61.96% at (149, 488, 30, 30)
+Frame 92: 4 detections
+  - car: 81.40% at (68, 496, 60, 50)
+Frame 92: 4 detections
+  - car: 79.64% at (0, 499, 33, 74)
+Frame 92: 4 detections
+  - bus: 73.83% at (0, 455, 118, 98)
+Frame 92: 4 detections
+  - car: 65.28% at (148, 488, 29, 30)
+Frame 93: 4 detections
+  - car: 80.62% at (67, 496, 61, 50)
+Frame 93: 4 detections
+  - car: 75.49% at (0, 499, 30, 75)
+Frame 93: 4 detections
+  - car: 66.46% at (148, 488, 31, 30)
+Frame 93: 4 detections
+  - bus: 66.46% at (0, 455, 118, 99)
+Frame 94: 4 detections
+  - car: 77.10% at (0, 498, 27, 75)
+Frame 94: 4 detections
+  - bus: 66.26% at (0, 454, 118, 100)
+Frame 94: 4 detections
+  - car: 65.38% at (146, 489, 32, 30)
+Frame 94: 4 detections
+  - car: 62.94% at (66, 496, 60, 48)
+Frame 95: 4 detections
+  - car: 77.73% at (0, 498, 25, 76)
+Frame 95: 4 detections
+  - car: 67.72% at (65, 497, 60, 46)
+Frame 95: 4 detections
+  - bus: 65.97% at (0, 454, 116, 99)
+Frame 95: 4 detections
+  - car: 63.53% at (145, 488, 35, 30)
+Frame 96: 3 detections
+  - car: 82.13% at (61, 496, 63, 50)
+Frame 96: 3 detections
+  - car: 78.17% at (0, 496, 22, 77)
+Frame 96: 3 detections
+  - car: 60.69% at (144, 488, 32, 30)
+Frame 97: 3 detections
+  - car: 83.94% at (59, 497, 64, 52)
+Frame 97: 3 detections
+  - car: 68.07% at (144, 490, 34, 30)
+Frame 97: 3 detections
+  - car: 64.50% at (0, 499, 18, 74)
+Frame 98: 4 detections
+  - car: 81.40% at (58, 496, 65, 53)
+Frame 98: 4 detections
+  - car: 65.14% at (142, 489, 33, 31)
+Frame 98: 4 detections
+  - bus: 60.64% at (0, 454, 114, 103)
+Frame 98: 4 detections
+  - car: 53.12% at (0, 502, 15, 72)
+Frame 99: 2 detections
+  - car: 83.06% at (56, 496, 65, 54)
+Frame 99: 2 detections
+  - bus: 62.70% at (0, 454, 113, 105)
+Frame 100: 2 detections
+  - car: 83.40% at (54, 496, 66, 57)
+Frame 100: 2 detections
+  - bus: 66.99% at (0, 454, 111, 108)
+Frame 101: 2 detections
+  - car: 78.22% at (54, 496, 65, 54)
+Frame 101: 2 detections
+  - bus: 74.80% at (0, 455, 110, 104)
+Frame 102: 2 detections
+  - car: 80.71% at (51, 496, 68, 56)
+Frame 102: 2 detections
+  - bus: 71.44% at (0, 455, 110, 106)
+Frame 103: 2 detections
+  - car: 75.34% at (49, 496, 68, 56)
+Frame 103: 2 detections
+  - bus: 64.99% at (0, 455, 109, 105)
+Frame 104: 2 detections
+  - car: 81.98% at (48, 496, 68, 60)
+Frame 104: 2 detections
+  - bus: 75.88% at (0, 455, 102, 106)
+Frame 105: 2 detections
+  - car: 82.81% at (45, 496, 69, 62)
+Frame 105: 2 detections
+  - bus: 78.37% at (0, 454, 102, 106)
+Frame 106: 2 detections
+  - car: 86.23% at (43, 496, 70, 60)
+Frame 106: 2 detections
+  - bus: 61.52% at (0, 454, 107, 106)
+Frame 107: 2 detections
+  - car: 87.45% at (42, 496, 70, 60)
+Frame 107: 2 detections
+  - bus: 77.64% at (0, 454, 107, 106)
+Frame 108: 3 detections
+  - car: 86.08% at (41, 496, 71, 58)
+Frame 108: 3 detections
+  - car: 68.70% at (129, 490, 46, 34)
+Frame 108: 3 detections
+  - bus: 59.38% at (0, 454, 107, 106)
+Frame 109: 3 detections
+  - car: 86.28% at (37, 496, 72, 60)
+Frame 109: 3 detections
+  - bus: 76.03% at (0, 454, 103, 106)
+Frame 109: 3 detections
+  - car: 73.00% at (128, 491, 47, 33)
+Frame 110: 3 detections
+  - car: 88.48% at (36, 496, 72, 62)
+Frame 110: 3 detections
+  - bus: 79.35% at (0, 454, 100, 106)
+Frame 110: 3 detections
+  - car: 68.21% at (126, 490, 47, 34)
+Frame 111: 3 detections
+  - car: 84.62% at (33, 497, 73, 62)
+Frame 111: 3 detections
+  - bus: 76.51% at (0, 454, 99, 107)
+Frame 111: 3 detections
+  - car: 76.17% at (126, 490, 41, 34)
+Frame 112: 3 detections
+  - car: 82.76% at (31, 496, 74, 64)
+Frame 112: 3 detections
+  - bus: 78.42% at (0, 454, 98, 108)
+Frame 112: 3 detections
+  - car: 67.77% at (125, 491, 43, 34)
+Frame 113: 3 detections
+  - car: 82.18% at (28, 497, 77, 64)
+Frame 113: 3 detections
+  - car: 70.46% at (123, 490, 45, 35)
+Frame 113: 3 detections
+  - bus: 67.63% at (0, 454, 99, 107)
+Frame 114: 2 detections
+  - car: 79.83% at (26, 497, 76, 65)
+Frame 114: 2 detections
+  - car: 68.60% at (121, 492, 45, 34)
+Frame 115: 2 detections
+  - car: 81.54% at (24, 497, 78, 65)
+Frame 115: 2 detections
+  - car: 71.09% at (120, 492, 48, 34)
+Frame 116: 3 detections
+  - car: 79.30% at (22, 497, 78, 65)
+Frame 116: 3 detections
+  - car: 60.40% at (118, 492, 54, 37)
+Frame 116: 3 detections
+  - bus: 51.90% at (0, 454, 92, 109)
+Frame 117: 2 detections
+  - car: 82.57% at (19, 498, 79, 66)
+Frame 117: 2 detections
+  - car: 62.94% at (117, 492, 54, 34)
+Frame 118: 2 detections
+  - car: 82.81% at (17, 498, 79, 65)
+Frame 118: 2 detections
+  - car: 66.31% at (116, 492, 52, 34)
+Frame 119: 2 detections
+  - car: 83.35% at (15, 498, 80, 67)
+Frame 119: 2 detections
+  - car: 53.32% at (115, 493, 54, 34)
+Frame 120: 2 detections
+  - car: 86.23% at (12, 499, 81, 68)
+Frame 120: 2 detections
+  - car: 56.49% at (113, 494, 46, 37)
+Frame 121: 2 detections
+  - car: 83.25% at (10, 498, 82, 68)
+Frame 121: 2 detections
+  - car: 53.32% at (109, 495, 53, 41)
+Frame 122: 2 detections
+  - car: 86.47% at (7, 500, 82, 66)
+Frame 122: 2 detections
+  - car: 56.10% at (109, 495, 51, 40)
+Frame 123: 2 detections
+  - car: 80.18% at (3, 500, 84, 68)
+Frame 123: 2 detections
+  - car: 63.92% at (108, 495, 50, 40)
+Frame 124: 2 detections
+  - car: 76.42% at (1, 500, 85, 69)
+Frame 124: 2 detections
+  - car: 62.16% at (107, 495, 51, 40)
+Frame 125: 2 detections
+  - car: 61.08% at (0, 501, 83, 70)
+Frame 125: 2 detections
+  - car: 57.52% at (105, 496, 50, 40)
+Frame 126: 2 detections
+  - car: 69.14% at (0, 502, 82, 68)
+Frame 126: 2 detections
+  - car: 54.83% at (103, 496, 51, 38)
+Frame 127: 2 detections
+  - car: 56.05% at (0, 502, 83, 70)
+Frame 127: 2 detections
+  - car: 55.62% at (101, 496, 53, 42)
+Frame 128: 1 detections
+  - car: 63.43% at (101, 497, 51, 37)
+Frame 129: 1 detections
+  - car: 62.30% at (0, 504, 86, 70)
+Frame 130: 2 detections
+  - car: 62.21% at (96, 498, 75, 42)
+Frame 130: 2 detections
+  - car: 57.91% at (0, 504, 73, 68)
+Frame 131: 2 detections
+  - car: 72.36% at (0, 506, 71, 68)
+Frame 131: 2 detections
+  - car: 61.13% at (94, 500, 53, 40)
+Frame 132: 1 detections
+  - car: 69.97% at (0, 506, 68, 68)
+Frame 133: 1 detections
+  - car: 70.90% at (0, 506, 65, 68)
+Frame 134: 2 detections
+  - car: 78.17% at (0, 507, 62, 69)
+Frame 134: 2 detections
+  - car: 53.22% at (90, 501, 54, 42)
+Frame 135: 1 detections
+  - car: 80.91% at (0, 507, 60, 70)
+Frame 136: 2 detections
+  - car: 83.89% at (0, 508, 58, 72)
+Frame 136: 2 detections
+  - car: 71.68% at (85, 502, 55, 46)
+Frame 137: 2 detections
+  - car: 81.40% at (0, 508, 57, 72)
+Frame 137: 2 detections
+  - car: 68.12% at (83, 502, 57, 47)
+Frame 138: 2 detections
+  - car: 77.83% at (81, 502, 58, 50)
+Frame 138: 2 detections
+  - car: 55.62% at (0, 509, 54, 71)
+Frame 139: 2 detections
+  - car: 79.88% at (79, 502, 59, 50)
+Frame 139: 2 detections
+  - car: 71.48% at (0, 510, 51, 71)
+Frame 140: 2 detections
+  - car: 81.20% at (77, 503, 60, 48)
+Frame 140: 2 detections
+  - car: 63.67% at (0, 511, 49, 69)
+Frame 141: 2 detections
+  - car: 71.34% at (78, 504, 57, 44)
+Frame 141: 2 detections
+  - car: 51.76% at (0, 512, 46, 68)
+Frame 142: 1 detections
+  - car: 60.01% at (73, 505, 61, 48)
+Frame 143: 2 detections
+  - car: 70.41% at (0, 515, 39, 68)
+Frame 143: 2 detections
+  - car: 66.85% at (72, 506, 62, 47)
+Frame 144: 2 detections
+  - car: 68.46% at (0, 515, 37, 68)
+Frame 144: 2 detections
+  - car: 58.45% at (69, 508, 62, 48)
+Frame 145: 2 detections
+  - car: 78.56% at (0, 515, 35, 70)
+Frame 145: 2 detections
+  - car: 72.31% at (68, 509, 62, 48)
+Frame 146: 2 detections
+  - car: 79.64% at (0, 515, 33, 70)
+Frame 146: 2 detections
+  - car: 79.00% at (66, 509, 63, 51)
+Frame 147: 2 detections
+  - car: 79.10% at (0, 517, 31, 68)
+Frame 147: 2 detections
+  - car: 76.32% at (64, 510, 65, 54)
+Frame 148: 2 detections
+  - car: 74.85% at (0, 519, 30, 66)
+Frame 148: 2 detections
+  - car: 72.17% at (62, 509, 66, 54)
+Frame 149: 3 detections
+  - car: 75.44% at (0, 520, 28, 65)
+Frame 149: 3 detections
+  - car: 72.12% at (58, 510, 68, 57)
+Frame 149: 3 detections
+  - bench: 50.54% at (305, 602, 68, 38)
+Frame 150: 2 detections
+  - car: 78.71% at (57, 513, 68, 58)
+Frame 150: 2 detections
+  - car: 76.32% at (0, 515, 24, 74)
+Frame 151: 3 detections
+  - car: 80.22% at (55, 513, 68, 58)
+Frame 151: 3 detections
+  - car: 74.80% at (0, 520, 21, 68)
+Frame 151: 3 detections
+  - bus: 51.61% at (154, 476, 45, 58)
+Frame 152: 2 detections
+  - car: 81.49% at (53, 514, 70, 58)
+Frame 152: 2 detections
+  - car: 61.52% at (0, 530, 20, 62)
+Frame 153: 1 detections
+  - car: 82.03% at (51, 514, 70, 60)
+Frame 154: 1 detections
+  - car: 83.25% at (50, 513, 70, 60)
+Frame 155: 1 detections
+  - car: 84.08% at (47, 514, 72, 60)
+Frame 156: 2 detections
+  - car: 78.86% at (45, 515, 72, 62)
+Frame 156: 2 detections
+  - truck: 55.66% at (153, 478, 45, 60)
+Frame 157: 2 detections
+  - car: 74.12% at (42, 515, 74, 64)
+Frame 157: 2 detections
+  - car: 56.20% at (153, 510, 25, 28)
+Frame 158: 3 detections
+  - car: 77.15% at (40, 517, 75, 62)
+Frame 158: 3 detections
+  - car: 63.13% at (152, 511, 26, 28)
+Frame 158: 3 detections
+  - person: 52.59% at (23, 517, 12, 38)
+Frame 159: 3 detections
+  - car: 79.54% at (38, 517, 75, 64)
+Frame 159: 3 detections
+  - car: 73.93% at (151, 512, 26, 27)
+Frame 159: 3 detections
+  - person: 53.52% at (24, 516, 12, 38)
+Frame 160: 2 detections
+  - car: 78.27% at (36, 517, 77, 64)
+Frame 160: 2 detections
+  - car: 65.97% at (151, 513, 26, 28)
+Frame 161: 1 detections
+  - car: 66.06% at (151, 513, 27, 28)
+Frame 162: 2 detections
+  - car: 73.34% at (30, 520, 78, 66)
+Frame 162: 2 detections
+  - car: 62.35% at (150, 513, 27, 30)
+Frame 163: 1 detections
+  - car: 84.28% at (28, 520, 80, 66)
+Frame 164: 1 detections
+  - car: 74.76% at (24, 521, 81, 68)
+Frame 165: 2 detections
+  - car: 84.28% at (23, 521, 81, 68)
+Frame 165: 2 detections
+  - car: 54.64% at (149, 515, 28, 30)
+Frame 166: 2 detections
+  - car: 82.91% at (20, 521, 82, 68)
+Frame 166: 2 detections
+  - car: 65.28% at (148, 516, 27, 29)
+Frame 167: 2 detections
+  - car: 81.45% at (17, 521, 84, 68)
+Frame 167: 2 detections
+  - car: 66.46% at (147, 515, 29, 30)
+Frame 168: 1 detections
+  - car: 72.75% at (15, 522, 84, 69)
+Frame 169: 1 detections
+  - car: 82.86% at (12, 522, 84, 68)
+Frame 170: 2 detections
+  - car: 83.54% at (8, 522, 87, 70)
+Frame 170: 2 detections
+  - car: 61.87% at (145, 514, 29, 31)
+Frame 171: 2 detections
+  - car: 76.90% at (4, 522, 89, 72)
+Frame 171: 2 detections
+  - car: 65.19% at (144, 513, 29, 31)

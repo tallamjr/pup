@@ -25,6 +25,7 @@ serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
 cocoa = "0.26"
 objc = "0.2.7"
+core-foundation = "0.9"
 glib = "0.20.7"  # Ensure compatibility across both crates
 once_cell = "1.19"
 cairo-rs = { version = "0.16", features = ["use_glib"] }
@@ -56,6 +57,22 @@ path = "src/bin/demo.rs"
 [[bin]]
 name = "visual_demo"
 path = "src/bin/visual_demo.rs"
+
+[[bin]]
+name = "file_demo"
+path = "src/bin/file_demo.rs"
+
+[[bin]]
+name = "detection_demo"
+path = "src/bin/detection_demo.rs"
+
+[[bin]]
+name = "simple_visual_demo"
+path = "src/bin/simple_visual_demo.rs"
+
+[[bin]]
+name = "unified_demo"
+path = "src/bin/demo.rs"
 
 [profile.release]
 codegen-units = 1   # Reduce number of codegen units to increase optimizations.

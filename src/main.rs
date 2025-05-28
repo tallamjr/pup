@@ -3,7 +3,7 @@
 //! Real-time object detection using GStreamer and ONNX Runtime.
 
 use clap::Parser;
-use pup::{
+use gstpup::{
     config::AppConfig,
     inference::{InferenceBackend, OrtBackend},
     pipeline::{FrameProcessor, VideoPipeline},
