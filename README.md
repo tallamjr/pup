@@ -27,8 +27,7 @@
 `pup` is a small proof-of-concept codebase for running ML models on video data
 using rust.
 
-The main libraries are `opencv` for video processing and `candle` as the deep
-learning framework.
+The main libraries are `opencv` for video processing and `ONNX Runtime` via the `ort` crate as the deep learning framework.
 
 ### _Why?_
 
@@ -50,11 +49,10 @@ rust has several advantages in this context:
 
 ### _What?_
 
-What's going on here then? This repo -- at the time of press -- uses the
-[Yolo-V8](https://github.com/huggingface/candle/tree/main/candle-examples/examples/yolo-v8)
-model defined in candle and applies it to video frames. The model itself could
+What's going on here then? This repo uses YOLOv8 ONNX models for object detection 
+and applies inference to video frames using ONNX Runtime. The model itself could
 of course be switched out for any other object detection architecture, this was
-only chosen as a first attempt at combining `opencv` with `candle`.
+chosen as a robust approach combining `opencv` with `ONNX Runtime` for high-performance inference.
 
 ## UPDATE 2025: Now Attempting to use GStreamer
 
@@ -83,15 +81,74 @@ only chosen as a first attempt at combining `opencv` with `candle`.
 
 ## Usage
 
-To run the simple example, run:
+There are two main binaries available with different purposes:
+
+## **`pup` (Main Binary)**
+**Professional GStreamer-based video processing system**
+
+- **Architecture**: Clean, modular design using proper abstractions
+- **Pipeline**: Full GStreamer VideoPipeline with FrameProcessor architecture  
+- **Configuration**: TOML config file support + command-line arguments
+- **Purpose**: Production-ready real-time object detection system
+- **Target Users**: Production/Integration environments
 
 ```bash
-cargo run --release -- --video assets/sample.mp4
+# Process video file
+cargo run --release --bin pup -- --model models/yolov8n.onnx --video assets/sample.mp4
+
+# Process webcam input
+cargo run --release --bin pup -- --model models/yolov8n.onnx --video webcam
+
+# With configuration file
+cargo run --release --bin pup -- --config config.toml
 ```
 
-> ❕ This assumes rust is install on the host system. If not one can run: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+## **`demo` (Demo Binary)**
+**Feature-rich demonstration and development tool**
 
-<!-- _Note, the first time this is run it will need to download the model weights from huggingface_ -->
+- **Architecture**: Self-contained demo with multiple specialised modes
+- **Pipeline**: Custom GStreamer pipelines built per mode
+- **Configuration**: Command-line only with sensible defaults
+- **Purpose**: Showcase capabilities, development testing, and experimentation
+- **Target Users**: Development/Demo purposes
+
+### Available Demo Modes:
+
+```bash
+# Live video with real-time YOLO bounding box overlays (⭐ recommended)
+cargo run --release --bin demo -- --mode live --input webcam
+cargo run --release --bin demo -- --mode live --input assets/sample.mp4
+
+# Terminal-only detection with file logging
+cargo run --release --bin demo -- --mode detection --input assets/sample.mp4
+
+# Video processing with terminal output (no display window)
+cargo run --release --bin demo -- --mode visual --input assets/sample.mp4
+
+# Basic video playback without inference
+cargo run --release --bin demo -- --mode playback --input webcam
+
+# Save processed video (under development)
+cargo run --release --bin demo -- --mode file-output --output processed.mp4
+```
+
+### Key Differences:
+
+| Aspect | `pup` (Main) | `demo` (Demo) |
+|--------|-------------|---------------|
+| **Target Users** | Production/Integration | Development/Demo |
+| **Complexity** | Clean, modular | Feature-rich, experimental |
+| **Visual Output** | Text-based | **Real-time video overlays** |
+| **Configuration** | TOML + CLI | CLI only |
+| **Video Display** | Minimal | Multiple modes including live overlays |
+| **Font Rendering** | None | Built-in bitmap fonts |
+| **Use Cases** | Integration, automation | Demos, development, testing |
+
+The **`demo` binary is more visually impressive** - especially `--mode live` which shows real-time bounding boxes drawn directly on video. The **`pup` binary is more suitable for production use** with its clean architecture and configuration management.
+
+> ❕ This assumes rust is installed on the host system. If not one can run: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+
+> ⚠️ **Model Required**: You need a YOLOv8 ONNX model file. Download `yolov8n.onnx` and place it in the `models/` directory.
 
 This will fire up a window like below and annotate objects in each frame:
 

@@ -20,7 +20,7 @@ gstreamer = "0.23.4"
 gstreamer-base = "0.23.4"
 gstreamer-video = "0.23.4"
 gstreamer-app = "0.23.4"
-ort = { version = "2.0.0-rc.9", features = [ "coreml", "load-dynamic" ] }
+ort = { version = "2.0.0-rc.9", features = [ "coreml", "download-binaries" ] }
 ndarray = "0.15"
 anyhow = "1.0"
 thiserror = "1.0"

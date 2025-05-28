@@ -234,13 +234,18 @@ mod tests {
     fn test_yolo_output_processing() {
         let processor = YoloPostProcessor::new(80, 0.5);
 
-        // Create mock YOLOv8 output: one detection with high confidence for class 0
-        let mut output = vec![0.0f32; 84];
-        output[0] = 320.0; // cx in pixels (center at 320)
-        output[1] = 320.0; // cy in pixels (center at 320)
-        output[2] = 128.0; // width in pixels
-        output[3] = 128.0; // height in pixels
-        output[4] = 0.9;   // confidence for class 0
+        // Create mock YOLOv8 output: correct size 84 * 8400 = 705,600 elements
+        let mut output = vec![0.0f32; 84 * 8400];
+        let num_predictions = 8400;
+        
+        // Set up one detection in the first position (anchor 0)
+        // YOLOv8 format is [84, 8400] - column major format
+        output[0] = 320.0; // cx at index [0, 0] = 0
+        output[num_predictions] = 320.0; // cy at index [1, 0] = 8400  
+        output[2 * num_predictions] = 128.0; // width at index [2, 0] = 16800
+        output[3 * num_predictions] = 128.0; // height at index [3, 0] = 25200
+        output[4 * num_predictions] = 0.9; // confidence for class 0 at index [4, 0] = 33600
+        // All other class confidences remain 0.0
 
         let input_shape = vec![1, 3, 640, 640];
         let detections = processor.process_raw_output(&output, &input_shape).unwrap();

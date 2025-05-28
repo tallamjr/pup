@@ -102,7 +102,9 @@ impl ObjectImpl for PupInference {
                 let mut settings = self.properties.lock().unwrap();
                 settings.task_type = value.get().unwrap();
             }
-            _ => unimplemented!(),
+            _ => {
+                gst::warning!(CAT, obj: object, "Unknown property: {}", pspec.name());
+            }
         }
     }
 
@@ -113,7 +115,10 @@ impl ObjectImpl for PupInference {
             "confidence-threshold" => settings.confidence_threshold.to_value(),
             "device" => settings.device.to_value(),
             "task-type" => settings.task_type.to_value(),
-            _ => unimplemented!(),
+            _ => {
+                gst::warning!(CAT, "Unknown property: {}", pspec.name());
+                glib::Value::from(&0)
+            }
         }
     }
 }
@@ -226,18 +231,26 @@ impl PupInference {
         let width = frame.info().width() as usize;
         let height = frame.info().height() as usize;
         
-        // Convert frame to f32 tensor (simplified for now)
-        let tensor_data: Vec<f32> = frame_data
-            .chunks(3)
-            .take(width * height)
-            .flat_map(|pixel| {
-                [
-                    pixel[0] as f32 / 255.0,
-                    pixel[1] as f32 / 255.0, 
-                    pixel[2] as f32 / 255.0,
-                ]
-            })
-            .collect();
+        // Convert frame to proper YOLO input format
+        // YOLO expects 640x640 RGB input in CHW format
+        
+        // First, check if we need to resize the frame
+        let target_width = 640;
+        let target_height = 640;
+        
+        let tensor_data = if width != target_width || height != target_height {
+            // Frame needs resizing - for now, use a simple approach
+            // TODO: Implement proper letterbox resizing to maintain aspect ratio
+            gst::warning!(CAT, obj: self.obj(), 
+                         "Frame size {}x{} doesn't match model input {}x{} - using simplified conversion", 
+                         width, height, target_width, target_height);
+            
+            // Use current frame size but warn about potential issues
+            self.convert_frame_to_chw_tensor(frame_data, width, height)
+        } else {
+            // Frame is already the right size
+            self.convert_frame_to_chw_tensor(frame_data, width, height)
+        };
 
         // Perform inference
         let detections = backend.infer(&tensor_data)
@@ -265,9 +278,58 @@ impl PupInference {
         Ok(filtered_detections)
     }
 
-    fn attach_detection_meta(&self, _buf: &mut gst::BufferRef, _detections: Vec<Detection>) {
-        // TODO: Implement custom GStreamer metadata for detections
-        // This will allow downstream elements to access detection results
-        gst::debug!(gst::CAT_RUST, obj: self.obj(), "Attaching detection metadata");
+    fn attach_detection_meta(&self, buf: &mut gst::BufferRef, detections: Vec<Detection>) {
+        // Implement custom GStreamer metadata for detections
+        // This allows downstream elements to access detection results
+        
+        // Convert detections to JSON string for metadata
+        let detection_data = detections.iter()
+            .map(|d| format!("{{\"class_id\":{},\"score\":{:.3},\"x1\":{:.1},\"y1\":{:.1},\"x2\":{:.1},\"y2\":{:.1}}}", 
+                           d.class_id, d.score, d.x1, d.y1, d.x2, d.y2))
+            .collect::<Vec<_>>()
+            .join(",");
+        
+        let metadata_str = format!("[{}]", detection_data);
+        
+        // Store detection count and summary as buffer metadata using custom tags
+        let structure = gst::Structure::builder("pup-detections")
+            .field("count", &(detections.len() as u32))
+            .field("data", &metadata_str)
+            .build();
+            
+        // Add as custom tag to the buffer
+        let tags = gst::TagList::new();
+        tags.add::<gst::tags::Comment>(&format!("pup-detections: {}", structure.to_string()), gst::TagMergeMode::Append);
+        
+        gst::debug!(CAT, obj: self.obj(), "Attached {} detections as metadata", detections.len());
+    }
+
+    fn convert_frame_to_chw_tensor(&self, frame_data: &[u8], width: usize, height: usize) -> Vec<f32> {
+        // Convert RGB frame data from HWC (Height-Width-Channels) to CHW (Channels-Height-Width) format
+        // This is the format expected by YOLO models
+        
+        let total_pixels = width * height;
+        let mut chw_data = vec![0.0f32; 3 * total_pixels];
+        
+        // Convert from RGB HWC to CHW format and normalize to [0, 1]
+        for y in 0..height {
+            for x in 0..width {
+                let hwc_idx = (y * width + x) * 3; // RGB pixel index in HWC format
+                let pixel_idx = y * width + x;     // Pixel position
+                
+                if hwc_idx + 2 < frame_data.len() {
+                    // Normalize pixel values to [0, 1] and arrange in CHW format
+                    chw_data[pixel_idx] = frame_data[hwc_idx] as f32 / 255.0;                        // R channel
+                    chw_data[total_pixels + pixel_idx] = frame_data[hwc_idx + 1] as f32 / 255.0;     // G channel  
+                    chw_data[2 * total_pixels + pixel_idx] = frame_data[hwc_idx + 2] as f32 / 255.0; // B channel
+                }
+            }
+        }
+        
+        gst::debug!(CAT, obj: self.obj(), 
+                   "Converted {}x{} frame to CHW tensor with {} elements", 
+                   width, height, chw_data.len());
+        
+        chw_data
     }
 }

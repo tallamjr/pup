@@ -106,7 +106,9 @@ impl ObjectImpl for PupOverlay {
                 let mut settings = self.properties.lock().unwrap();
                 settings.line_thickness = value.get().unwrap();
             }
-            _ => unimplemented!(),
+            _ => {
+                gst::warning!(CAT, obj: object, "Unknown property: {}", pspec.name());
+            }
         }
     }
 
@@ -118,7 +120,10 @@ impl ObjectImpl for PupOverlay {
             "bbox-color" => settings.bbox_color.to_value(),
             "font-size" => settings.font_size.to_value(),
             "line-thickness" => settings.line_thickness.to_value(),
-            _ => unimplemented!(),
+            _ => {
+                gst::warning!(CAT, "Unknown property: {}", pspec.name());
+                glib::Value::from(&0)
+            }
         }
     }
 }
@@ -199,9 +204,28 @@ impl BaseTransformImpl for PupOverlay {
 impl VideoFilterImpl for PupOverlay {}
 
 impl PupOverlay {
-    fn extract_detection_meta(&self, _buf: &gst::BufferRef) -> Vec<Detection> {
-        // TODO: Extract detections from custom GStreamer metadata
-        // For now, return empty vector
+    fn extract_detection_meta(&self, buf: &gst::BufferRef) -> Vec<Detection> {
+        // Extract detections from custom GStreamer metadata
+        // Look for custom metadata attached by PupInference
+        
+        // Try to find custom tags with detection data
+        if let Some(tags) = buf.meta::<gst::meta::TagsMeta>() {
+            let tag_list = tags.tags();
+            if let Some(comment) = tag_list.get::<gst::tags::Comment>() {
+                if let Some(comment_str) = comment.get() {
+                    if comment_str.starts_with("pup-detections:") {
+                        // Parse the detection metadata
+                        if let Some(structure_str) = comment_str.strip_prefix("pup-detections: ") {
+                            gst::debug!(CAT, obj: self.obj(), "Found detection metadata: {}", structure_str);
+                            // TODO: Implement full JSON parsing of detection metadata
+                            return Vec::new();
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Fallback: return empty vector if no metadata found
         Vec::new()
     }
 
@@ -236,10 +260,27 @@ impl PupOverlay {
             // Draw bounding box
             self.draw_rectangle(frame_data, stride, x1, y1, x2, y2, settings.line_thickness as usize);
             
-            // TODO: Add text rendering for labels and confidence
+            // Add text rendering for labels and confidence
             if settings.show_labels || settings.show_confidence {
-                gst::debug!(gst::CAT_RUST, obj: self.obj(), 
-                           "Label rendering not yet implemented");
+                let label = if settings.show_labels && settings.show_confidence {
+                    format!("Class {}: {:.1}%", detection.class_id, detection.score * 100.0)
+                } else if settings.show_labels {
+                    format!("Class {}", detection.class_id)
+                } else {
+                    format!("{:.1}%", detection.score * 100.0)
+                };
+                
+                // Render simple text above bounding box
+                // Note: This is a basic implementation - more sophisticated text rendering
+                // would require a proper font rendering library
+                self.render_simple_text(
+                    frame_data, 
+                    stride, 
+                    x1, 
+                    y1.saturating_sub(15), // Position text above bbox
+                    &label,
+                    settings.font_size as usize
+                );
             }
         }
 
@@ -316,6 +357,50 @@ impl PupOverlay {
                 frame_data[pixel_start] = r;
                 frame_data[pixel_start + 1] = g;
                 frame_data[pixel_start + 2] = b;
+            }
+        }
+    }
+
+    fn render_simple_text(
+        &self,
+        frame_data: &mut [u8],
+        stride: usize,
+        x: usize,
+        y: usize,
+        text: &str,
+        font_size: usize,
+    ) {
+        // Simple text rendering using basic pixel drawing
+        // TODO: Replace with proper font rendering library like cairo or freetype
+        
+        let char_width = font_size.max(8);
+        let char_height = font_size.max(12);
+        
+        for (i, ch) in text.chars().enumerate() {
+            let char_x = x + i * char_width;
+            
+            // Draw a simple rectangular background for each character
+            for py in y..=(y + char_height).min(frame_data.len() / stride) {
+                for px in char_x..=(char_x + char_width - 1) {
+                    let pixel_start = py * stride + px * 3;
+                    if pixel_start + 2 < frame_data.len() {
+                        // Semi-transparent black background
+                        frame_data[pixel_start] = frame_data[pixel_start] / 2;     // R
+                        frame_data[pixel_start + 1] = frame_data[pixel_start + 1] / 2; // G  
+                        frame_data[pixel_start + 2] = frame_data[pixel_start + 2] / 2; // B
+                    }
+                }
+            }
+            
+            // Draw simple character representation (basic blocks for now)
+            // A full implementation would use actual font data
+            if ch.is_ascii_alphanumeric() {
+                let mid_x = char_x + char_width / 2;
+                let mid_y = y + char_height / 2;
+                
+                // Draw a simple cross pattern to represent the character
+                self.draw_horizontal_line(frame_data, stride, char_x, char_x + char_width - 1, mid_y, 255, 255, 255);
+                self.draw_vertical_line(frame_data, stride, mid_x, y, y + char_height, 255, 255, 255);
             }
         }
     }
