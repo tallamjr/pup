@@ -4,6 +4,7 @@ use anyhow::Result;
 use opencv::{core, imgproc, prelude::*};
 
 /// Image preprocessor for ML inference
+#[derive(Clone)]
 pub struct Preprocessor {
     target_width: i32,
     target_height: i32,

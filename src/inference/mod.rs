@@ -8,16 +8,44 @@ pub mod ort_backend;
 
 pub use ort_backend::OrtBackend;
 
+/// Types of computer vision tasks supported
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TaskType {
+    ObjectDetection,
+    KeypointDetection,
+    PoseEstimation,
+    ImageClassification,
+    SemanticSegmentation,
+    InstanceSegmentation,
+    FacialRecognition,
+    ActivityRecognition,
+}
+
+/// Output from different types of computer vision tasks
+#[derive(Debug, Clone)]
+pub enum TaskOutput {
+    Detections(Vec<Detection>),
+    // TODO: Add other task outputs as we implement them
+    // Keypoints(Vec<Keypoint>),
+    // Poses(Vec<Pose>),
+    // Classifications(Vec<Classification>),
+    // Segmentation(SegmentationMask),
+    // Activities(Vec<Activity>),
+}
+
 /// Inference backend trait for different ML frameworks
-pub trait InferenceBackend {
+pub trait InferenceBackend: Send + Sync {
     /// Load a model from the given path
     fn load_model(&mut self, path: &Path) -> Result<(), InferenceError>;
 
     /// Run inference on input tensor data
-    fn infer(&self, input: &[f32]) -> Result<Vec<Detection>, InferenceError>;
+    fn infer(&self, input: &[f32]) -> Result<TaskOutput, InferenceError>;
 
     /// Get the expected input shape [batch, channels, height, width]
     fn get_input_shape(&self) -> &[usize];
+
+    /// Get the task type this backend supports
+    fn get_task_type(&self) -> TaskType;
 
     /// Get the model's confidence threshold
     fn get_confidence_threshold(&self) -> f32;

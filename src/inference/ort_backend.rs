@@ -1,6 +1,6 @@
 //! ONNX Runtime backend implementation
 
-use super::{InferenceBackend, InferenceError, ModelPostProcessor, YoloPostProcessor};
+use super::{InferenceBackend, InferenceError, ModelPostProcessor, YoloPostProcessor, TaskType, TaskOutput};
 use crate::utils::Detection;
 use ort::{
     execution_providers::CoreMLExecutionProvider,
@@ -110,7 +110,7 @@ impl InferenceBackend for OrtBackend {
         Ok(())
     }
 
-    fn infer(&self, input: &[f32]) -> Result<Vec<Detection>, InferenceError> {
+    fn infer(&self, input: &[f32]) -> Result<TaskOutput, InferenceError> {
         let session = self
             .session
             .as_ref()
@@ -152,11 +152,15 @@ impl InferenceBackend for OrtBackend {
         // Apply NMS
         detections = self.post_processor.apply_nms(detections, 0.5);
 
-        Ok(detections)
+        Ok(TaskOutput::Detections(detections))
     }
 
     fn get_input_shape(&self) -> &[usize] {
         &self.input_shape
+    }
+
+    fn get_task_type(&self) -> TaskType {
+        TaskType::ObjectDetection // Default to object detection for now
     }
 
     fn get_confidence_threshold(&self) -> f32 {

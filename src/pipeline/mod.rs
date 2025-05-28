@@ -253,12 +253,16 @@ impl FrameProcessor {
         // Run inference
         let inference_backend = self.inference_backend.lock().unwrap();
         match inference_backend.infer(&tensor_data) {
-            Ok(detections) => {
-                println!("Found {} detections", detections.len());
-                for detection in &detections {
-                    println!("  {}", detection);
+            Ok(task_output) => {
+                match task_output {
+                    crate::inference::TaskOutput::Detections(detections) => {
+                        println!("Found {} detections", detections.len());
+                        for detection in &detections {
+                            println!("  {}", detection);
+                        }
+                        detections
+                    }
                 }
-                detections
             }
             Err(e) => {
                 eprintln!("Inference failed: {:?}", e);

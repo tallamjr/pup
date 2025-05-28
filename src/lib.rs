@@ -10,9 +10,12 @@ pub mod pipeline;
 pub mod preprocessing;
 pub mod utils;
 
+// GStreamer plugins
+pub mod gst_plugins;
+
 // Re-export commonly used types
 pub use config::{InferenceConfig, PipelineConfig};
-pub use inference::{InferenceBackend, InferenceError, OrtBackend};
+pub use inference::{InferenceBackend, InferenceError, OrtBackend, TaskType, TaskOutput};
 pub use preprocessing::Preprocessor;
 pub use utils::{Detection, DetectionError};
 
