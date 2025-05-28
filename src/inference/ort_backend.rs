@@ -1,7 +1,6 @@
 //! ONNX Runtime backend implementation
 
 use super::{InferenceBackend, InferenceError, ModelPostProcessor, YoloPostProcessor, TaskType, TaskOutput};
-use crate::utils::Detection;
 use ort::{
     execution_providers::CoreMLExecutionProvider,
     session::{builder::GraphOptimizationLevel, Session},

@@ -2,11 +2,8 @@
 //! 
 //! Performs ML inference on video frames using ONNX Runtime
 
-use glib::subclass::prelude::*;
 use gstreamer as gst;
 use gstreamer::prelude::*;
-use gstreamer_base as gst_base;
-use gstreamer_video as gst_video;
 
 mod simple_imp;
 use simple_imp as imp;

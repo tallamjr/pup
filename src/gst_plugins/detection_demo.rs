@@ -270,7 +270,6 @@ impl DetectionProcessor {
                 // Filter detections with reasonable confidence
                 Ok(detections.into_iter().filter(|d| d.score > 0.5).collect())
             }
-            _ => Ok(Vec::new()),
         }
     }
 }

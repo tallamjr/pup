@@ -1,7 +1,7 @@
 [package]
 edition = "2021"
 name = "pup"
-version = "0.2.1"
+version = "0.2.4"
 description = "Real-time multi-task computer vision with GStreamer and ONNX Runtime"
 authors = ["Tarek Allam Jr <t.allam.jr@gmail.com>"]
 license = "MIT"
@@ -52,26 +52,6 @@ path = "src/main.rs"
 
 [[bin]]
 name = "demo"
-path = "src/bin/demo.rs"
-
-[[bin]]
-name = "visual_demo"
-path = "src/bin/visual_demo.rs"
-
-[[bin]]
-name = "file_demo"
-path = "src/bin/file_demo.rs"
-
-[[bin]]
-name = "detection_demo"
-path = "src/bin/detection_demo.rs"
-
-[[bin]]
-name = "simple_visual_demo"
-path = "src/bin/simple_visual_demo.rs"
-
-[[bin]]
-name = "unified_demo"
 path = "src/bin/demo.rs"
 
 [profile.release]

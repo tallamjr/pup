@@ -13,7 +13,6 @@ use gstreamer_video as gst_video;
 use std::fs::File;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
-use std::collections::VecDeque;
 
 #[cfg(target_os = "macos")]
 mod macos_workaround {
@@ -80,21 +79,25 @@ Features real-time video processing, visual bounding box overlays, and file outp
 
 EXAMPLES:
   unified_demo --mode live                           # Live video with overlays (recommended)
+  unified_demo --mode live --input webcam           # Live webcam with YOLO overlays
   unified_demo --mode detection                      # Terminal-only detection output  
+  unified_demo --mode detection --input webcam      # Webcam detection (terminal only)
+  unified_demo --mode playback --input webcam       # Basic webcam playback
   unified_demo --mode file-output --output out.mp4  # Save video with overlays
-  unified_demo --mode playback                       # Basic video playback
   
 NOTES:
   - Uses YOLOv8 ONNX model for object detection
+  - Supports file input (MP4, etc.) and webcam input (use 'webcam' as input)
   - Supports macOS video display with proper window handling
   - Applies Non-Maximum Suppression to reduce duplicate detections
-  - Live mode shows real-time bounding boxes overlaid on video")]
-struct Args {
+  - Live mode shows real-time bounding boxes overlaid on video
+  - Webcam support: Cross-platform using autovideosrc (auto-detects camera)")]
+pub struct Args {
     /// Demo mode: detection (terminal only), live (video + overlays), visual (video + terminal), playback (video only), file-output (save with overlays)
     #[arg(short, long, value_enum, default_value = "detection")]
     mode: DemoMode,
 
-    /// Input video file path
+    /// Input source: video file path or 'webcam' for camera input
     #[arg(short, long, default_value = "assets/sample.mp4")]
     input: String,
 
@@ -120,7 +123,6 @@ pub struct UnifiedProcessor {
     frame_count: Arc<Mutex<u32>>,
     mode: DemoMode,
     confidence_threshold: f32,
-    frame_buffer: Arc<Mutex<VecDeque<Vec<u8>>>>,
 }
 
 impl UnifiedProcessor {
@@ -153,7 +155,6 @@ impl UnifiedProcessor {
 
         let detections = Arc::new(Mutex::new(Vec::new()));
         let frame_count = Arc::new(Mutex::new(0u32));
-        let frame_buffer = Arc::new(Mutex::new(VecDeque::new()));
 
         // Build pipeline based on mode
         let processor = Self {
@@ -165,7 +166,6 @@ impl UnifiedProcessor {
             frame_count,
             mode: args.mode.clone(),
             confidence_threshold: args.confidence,
-            frame_buffer,
         };
 
         processor.build_pipeline(args)?;
@@ -182,15 +182,36 @@ impl UnifiedProcessor {
         }
     }
 
+    fn create_source_elements(&self, input: &str) -> Result<(gst::Element, gst::Element)> {
+        if input.to_lowercase() == "webcam" {
+            println!("Creating webcam source pipeline");
+            
+            // Use autovideosrc for cross-platform camera access
+            let source = gst::ElementFactory::make("autovideosrc").build()?;
+            
+            // No decodebin needed for webcam - raw video frames
+            let videoconvert = gst::ElementFactory::make("videoconvert").build()?;
+            
+            Ok((source, videoconvert))
+        } else {
+            println!("Creating file source pipeline for: {}", input);
+            
+            // Create file source elements
+            let filesrc = gst::ElementFactory::make("filesrc")
+                .property("location", input)
+                .build()?;
+            
+            let decodebin = gst::ElementFactory::make("decodebin").build()?;
+            
+            Ok((filesrc, decodebin))
+        }
+    }
+
     fn build_playback_pipeline(&self, args: &Args) -> Result<()> {
         println!("Building playback pipeline for: {}", args.input);
 
-        // Create a more explicit pipeline for macOS video display
-        let filesrc = gst::ElementFactory::make("filesrc")
-            .property("location", &args.input)
-            .build()?;
-        
-        let decodebin = gst::ElementFactory::make("decodebin").build()?;
+        // Create source elements (file or webcam)
+        let (source, decode_or_convert) = self.create_source_elements(&args.input)?;
         let videoconvert = gst::ElementFactory::make("videoconvert").build()?;
         
         // Try different video sinks for macOS compatibility
@@ -205,28 +226,38 @@ impl UnifiedProcessor {
             gst::ElementFactory::make("autovideosink").build()?
         };
 
-        // Add elements to pipeline
-        self.pipeline.add_many(&[&filesrc, &decodebin, &videoconvert, &videosink])?;
+        if args.input.to_lowercase() == "webcam" {
+            // Webcam pipeline: source -> videoconvert -> videosink
+            self.pipeline.add_many(&[&source, &decode_or_convert, &videoconvert, &videosink])?;
+            
+            // Link directly for webcam (no decoding needed)
+            source.link(&decode_or_convert)?;
+            decode_or_convert.link(&videoconvert)?;
+            videoconvert.link(&videosink)?;
+        } else {
+            // File pipeline: filesrc -> decodebin -> videoconvert -> videosink
+            self.pipeline.add_many(&[&source, &decode_or_convert, &videoconvert, &videosink])?;
 
-        // Link static elements
-        filesrc.link(&decodebin)?;
-        videoconvert.link(&videosink)?;
+            // Link static elements
+            source.link(&decode_or_convert)?;
+            videoconvert.link(&videosink)?;
 
-        // Connect decodebin pad-added signal for dynamic linking
-        let videoconvert_clone = videoconvert.clone();
-        decodebin.connect("pad-added", false, move |values| {
-            let pad = values[1].get::<gst::Pad>().unwrap();
-            if let Some(caps) = pad.current_caps() {
-                let structure = caps.structure(0).unwrap();
-                if structure.name().starts_with("video/") {
-                    let sink_pad = videoconvert_clone.static_pad("sink").unwrap();
-                    if !sink_pad.is_linked() {
-                        let _ = pad.link(&sink_pad);
+            // Connect decodebin pad-added signal for dynamic linking
+            let videoconvert_clone = videoconvert.clone();
+            decode_or_convert.connect("pad-added", false, move |values| {
+                let pad = values[1].get::<gst::Pad>().unwrap();
+                if let Some(caps) = pad.current_caps() {
+                    let structure = caps.structure(0).unwrap();
+                    if structure.name().starts_with("video/") {
+                        let sink_pad = videoconvert_clone.static_pad("sink").unwrap();
+                        if !sink_pad.is_linked() {
+                            let _ = pad.link(&sink_pad);
+                        }
                     }
                 }
-            }
-            None
-        });
+                None
+            });
+        }
 
         Ok(())
     }
@@ -321,12 +352,8 @@ impl UnifiedProcessor {
     fn build_live_pipeline(&self, args: &Args) -> Result<()> {
         println!("Building live video pipeline with YOLO inference overlays for: {}", args.input);
 
-        // Create elements for live video with inference and display
-        let filesrc = gst::ElementFactory::make("filesrc")
-            .property("location", &args.input)
-            .build()?;
-        
-        let decodebin = gst::ElementFactory::make("decodebin").build()?;
+        // Create source elements (file or webcam)
+        let (source, decode_or_convert) = self.create_source_elements(&args.input)?;
         let videoconvert1 = gst::ElementFactory::make("videoconvert").build()?;
         let videoscale1 = gst::ElementFactory::make("videoscale").build()?;
         
@@ -367,18 +394,47 @@ impl UnifiedProcessor {
             gst::ElementFactory::make("autovideosink").build()?
         };
 
-        // Add elements to pipeline
-        self.pipeline.add_many(&[
-            &filesrc, &decodebin, &videoconvert1, &videoscale1, &capsfilter1, &tee,
-            &queue1, &queue2, &videoconvert2, &videosink
-        ])?;
-        self.pipeline.add(&appsink)?;
+        if args.input.to_lowercase() == "webcam" {
+            // Webcam pipeline: source -> videoconvert -> videoscale -> capsfilter -> tee
+            self.pipeline.add_many(&[
+                &source, &decode_or_convert, &videoconvert1, &videoscale1, &capsfilter1, &tee,
+                &queue1, &queue2, &videoconvert2, &videosink
+            ])?;
+            self.pipeline.add(&appsink)?;
 
-        // Link static elements
-        filesrc.link(&decodebin)?;
-        gst::Element::link_many(&[&videoconvert1, &videoscale1, &capsfilter1, &tee])?;
+            // Link static elements for webcam
+            source.link(&decode_or_convert)?;
+            gst::Element::link_many(&[&decode_or_convert, &videoconvert1, &videoscale1, &capsfilter1, &tee])?;
+        } else {
+            // File pipeline: filesrc -> decodebin -> videoconvert -> videoscale -> capsfilter -> tee
+            self.pipeline.add_many(&[
+                &source, &decode_or_convert, &videoconvert1, &videoscale1, &capsfilter1, &tee,
+                &queue1, &queue2, &videoconvert2, &videosink
+            ])?;
+            self.pipeline.add(&appsink)?;
 
-        // Link tee to both paths
+            // Link static elements for file
+            source.link(&decode_or_convert)?;
+            gst::Element::link_many(&[&videoconvert1, &videoscale1, &capsfilter1, &tee])?;
+
+            // Connect decodebin pad-added signal for file input
+            let videoconvert1_clone = videoconvert1.clone();
+            decode_or_convert.connect("pad-added", false, move |values| {
+                let pad = values[1].get::<gst::Pad>().unwrap();
+                if let Some(caps) = pad.current_caps() {
+                    let structure = caps.structure(0).unwrap();
+                    if structure.name().starts_with("video/") {
+                        let sink_pad = videoconvert1_clone.static_pad("sink").unwrap();
+                        if !sink_pad.is_linked() {
+                            let _ = pad.link(&sink_pad);
+                        }
+                    }
+                }
+                None
+            });
+        }
+
+        // Link tee to both paths (same for both file and webcam)
         let tee_src_pad_template = tee.pad_template("src_%u").unwrap();
         let tee_src_pad1 = tee.request_pad(&tee_src_pad_template, Some("src_0"), None).unwrap();
         let tee_src_pad2 = tee.request_pad(&tee_src_pad_template, Some("src_1"), None).unwrap();
@@ -392,22 +448,6 @@ impl UnifiedProcessor {
         // Display path: queue2 -> videoconvert2 -> videosink (overlay handled by pad probe)
         queue2.link(&videoconvert2)?;
         videoconvert2.link(&videosink)?;
-
-        // Connect decodebin pad-added signal
-        let videoconvert1_clone = videoconvert1.clone();
-        decodebin.connect("pad-added", false, move |values| {
-            let pad = values[1].get::<gst::Pad>().unwrap();
-            if let Some(caps) = pad.current_caps() {
-                let structure = caps.structure(0).unwrap();
-                if structure.name().starts_with("video/") {
-                    let sink_pad = videoconvert1_clone.static_pad("sink").unwrap();
-                    if !sink_pad.is_linked() {
-                        let _ = pad.link(&sink_pad);
-                    }
-                }
-            }
-            None
-        });
 
         // Setup overlay rendering: intercept frames from queue2 and modify them in-place
         self.setup_live_overlay_callback(&queue2)?;
@@ -653,7 +693,133 @@ impl UnifiedProcessor {
                     Self::set_pixel_direct(data, x as usize, y as usize, width, color);
                 }
             }
+            
+            // Get class name
+            let class_name = if detection.class_id >= 0 && (detection.class_id as usize) < COCO_NAMES.len() {
+                COCO_NAMES[detection.class_id as usize]
+            } else {
+                "unknown"
+            };
+            
+            // Draw simple text label using basic pixel drawing
+            let label_text = format!("{}: {:.1}%", class_name, detection.score * 100.0);
+            
+            // Position label above bounding box
+            let label_x = x1 as usize;
+            let label_y = if y1 > 20 { 
+                (y1 - 15) as usize  // Above box
+            } else {
+                (y2 + 5) as usize   // Below box
+            };
+            
+            // Draw simple text background (black rectangle)
+            let text_width = label_text.len() * 8; // Rough estimate: 8 pixels per character
+            let text_height = 12;
+            
+            for ty in label_y.saturating_sub(2)..=(label_y + text_height + 2).min(height - 1) {
+                for tx in label_x.saturating_sub(2)..=(label_x + text_width + 2).min(width - 1) {
+                    Self::set_pixel_direct(data, tx, ty, width, (0, 0, 0)); // Black background
+                }
+            }
+            
+            // Draw simple white text using bitmap font
+            Self::draw_text(data, width, height, &label_text, label_x, label_y, (255, 255, 255))
         }
+    }
+
+    fn draw_text(data: &mut [u8], width: usize, height: usize, text: &str, start_x: usize, start_y: usize, color: (u8, u8, u8)) {
+        // Simple 8x12 bitmap font patterns for common characters
+        // Each character is 8 pixels wide and 12 pixels tall
+        let font_patterns = Self::get_font_patterns();
+        
+        let mut x = start_x;
+        let y = start_y;
+        
+        for ch in text.chars() {
+            if let Some(pattern) = font_patterns.get(&ch) {
+                // Draw this character
+                for row in 0..12 {
+                    if y + row >= height { break; }
+                    for col in 0..8 {
+                        if x + col >= width { break; }
+                        // Check if this pixel should be drawn (1 in the pattern)
+                        if (pattern[row] >> (7 - col)) & 1 == 1 {
+                            Self::set_pixel_direct(data, x + col, y + row, width, color);
+                        }
+                    }
+                }
+            }
+            x += 8; // Move to next character position
+            if x >= width { break; }
+        }
+    }
+    
+    fn get_font_patterns() -> std::collections::HashMap<char, [u8; 12]> {
+        let mut patterns = std::collections::HashMap::new();
+        
+        // Define simple bitmap patterns for each character (8x12)
+        // Format: each byte represents one row, each bit represents one pixel
+        
+        // Letters
+        patterns.insert('A', [0x00, 0x18, 0x24, 0x42, 0x42, 0x7E, 0x42, 0x42, 0x42, 0x42, 0x00, 0x00]);
+        patterns.insert('B', [0x00, 0x7C, 0x42, 0x42, 0x7C, 0x42, 0x42, 0x42, 0x42, 0x7C, 0x00, 0x00]);
+        patterns.insert('C', [0x00, 0x3C, 0x42, 0x40, 0x40, 0x40, 0x40, 0x40, 0x42, 0x3C, 0x00, 0x00]);
+        patterns.insert('D', [0x00, 0x78, 0x44, 0x42, 0x42, 0x42, 0x42, 0x42, 0x44, 0x78, 0x00, 0x00]);
+        patterns.insert('E', [0x00, 0x7E, 0x40, 0x40, 0x40, 0x7C, 0x40, 0x40, 0x40, 0x7E, 0x00, 0x00]);
+        patterns.insert('F', [0x00, 0x7E, 0x40, 0x40, 0x40, 0x7C, 0x40, 0x40, 0x40, 0x40, 0x00, 0x00]);
+        patterns.insert('G', [0x00, 0x3C, 0x42, 0x40, 0x40, 0x4E, 0x42, 0x42, 0x46, 0x3A, 0x00, 0x00]);
+        patterns.insert('H', [0x00, 0x42, 0x42, 0x42, 0x42, 0x7E, 0x42, 0x42, 0x42, 0x42, 0x00, 0x00]);
+        patterns.insert('I', [0x00, 0x3E, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x3E, 0x00, 0x00]);
+        patterns.insert('L', [0x00, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x7E, 0x00, 0x00]);
+        patterns.insert('M', [0x00, 0x42, 0x66, 0x5A, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x00, 0x00]);
+        patterns.insert('N', [0x00, 0x42, 0x62, 0x52, 0x4A, 0x46, 0x42, 0x42, 0x42, 0x42, 0x00, 0x00]);
+        patterns.insert('O', [0x00, 0x3C, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x3C, 0x00, 0x00]);
+        patterns.insert('P', [0x00, 0x7C, 0x42, 0x42, 0x42, 0x7C, 0x40, 0x40, 0x40, 0x40, 0x00, 0x00]);
+        patterns.insert('R', [0x00, 0x7C, 0x42, 0x42, 0x42, 0x7C, 0x48, 0x44, 0x42, 0x42, 0x00, 0x00]);
+        patterns.insert('S', [0x00, 0x3C, 0x42, 0x40, 0x30, 0x0C, 0x02, 0x42, 0x42, 0x3C, 0x00, 0x00]);
+        patterns.insert('T', [0x00, 0x7F, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x00, 0x00]);
+        patterns.insert('U', [0x00, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x3C, 0x00, 0x00]);
+        patterns.insert('Y', [0x00, 0x41, 0x22, 0x14, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x00, 0x00]);
+        
+        // Lowercase letters (common ones)
+        patterns.insert('a', [0x00, 0x00, 0x00, 0x3C, 0x02, 0x3E, 0x42, 0x42, 0x46, 0x3A, 0x00, 0x00]);
+        patterns.insert('b', [0x00, 0x40, 0x40, 0x5C, 0x62, 0x42, 0x42, 0x42, 0x62, 0x5C, 0x00, 0x00]);
+        patterns.insert('c', [0x00, 0x00, 0x00, 0x3C, 0x42, 0x40, 0x40, 0x40, 0x42, 0x3C, 0x00, 0x00]);
+        patterns.insert('d', [0x00, 0x02, 0x02, 0x3A, 0x46, 0x42, 0x42, 0x42, 0x46, 0x3A, 0x00, 0x00]);
+        patterns.insert('e', [0x00, 0x00, 0x00, 0x3C, 0x42, 0x7E, 0x40, 0x40, 0x42, 0x3C, 0x00, 0x00]);
+        patterns.insert('i', [0x00, 0x08, 0x00, 0x18, 0x08, 0x08, 0x08, 0x08, 0x08, 0x3E, 0x00, 0x00]);
+        patterns.insert('k', [0x00, 0x40, 0x40, 0x44, 0x48, 0x70, 0x48, 0x44, 0x42, 0x41, 0x00, 0x00]);
+        patterns.insert('l', [0x00, 0x18, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x3E, 0x00, 0x00]);
+        patterns.insert('n', [0x00, 0x00, 0x00, 0x5C, 0x62, 0x42, 0x42, 0x42, 0x42, 0x42, 0x00, 0x00]);
+        patterns.insert('o', [0x00, 0x00, 0x00, 0x3C, 0x42, 0x42, 0x42, 0x42, 0x42, 0x3C, 0x00, 0x00]);
+        patterns.insert('r', [0x00, 0x00, 0x00, 0x5C, 0x62, 0x40, 0x40, 0x40, 0x40, 0x40, 0x00, 0x00]);
+        patterns.insert('s', [0x00, 0x00, 0x00, 0x3E, 0x40, 0x3C, 0x02, 0x02, 0x42, 0x3C, 0x00, 0x00]);
+        patterns.insert('t', [0x00, 0x10, 0x10, 0x7C, 0x10, 0x10, 0x10, 0x10, 0x10, 0x0C, 0x00, 0x00]);
+        patterns.insert('u', [0x00, 0x00, 0x00, 0x42, 0x42, 0x42, 0x42, 0x42, 0x46, 0x3A, 0x00, 0x00]);
+        patterns.insert('v', [0x00, 0x00, 0x00, 0x42, 0x42, 0x42, 0x24, 0x24, 0x18, 0x18, 0x00, 0x00]);
+        patterns.insert('w', [0x00, 0x00, 0x00, 0x42, 0x42, 0x42, 0x5A, 0x66, 0x42, 0x42, 0x00, 0x00]);
+        patterns.insert('x', [0x00, 0x00, 0x00, 0x42, 0x24, 0x18, 0x18, 0x24, 0x42, 0x42, 0x00, 0x00]);
+        patterns.insert('y', [0x00, 0x00, 0x00, 0x42, 0x42, 0x42, 0x26, 0x1A, 0x02, 0x3C, 0x00, 0x00]);
+        
+        // Numbers
+        patterns.insert('0', [0x00, 0x3C, 0x42, 0x46, 0x4A, 0x52, 0x62, 0x42, 0x42, 0x3C, 0x00, 0x00]);
+        patterns.insert('1', [0x00, 0x08, 0x18, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x3E, 0x00, 0x00]);
+        patterns.insert('2', [0x00, 0x3C, 0x42, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x7E, 0x00, 0x00]);
+        patterns.insert('3', [0x00, 0x3C, 0x42, 0x02, 0x1C, 0x02, 0x02, 0x02, 0x42, 0x3C, 0x00, 0x00]);
+        patterns.insert('4', [0x00, 0x04, 0x0C, 0x14, 0x24, 0x44, 0x7E, 0x04, 0x04, 0x04, 0x00, 0x00]);
+        patterns.insert('5', [0x00, 0x7E, 0x40, 0x40, 0x7C, 0x02, 0x02, 0x02, 0x42, 0x3C, 0x00, 0x00]);
+        patterns.insert('6', [0x00, 0x1C, 0x20, 0x40, 0x7C, 0x42, 0x42, 0x42, 0x42, 0x3C, 0x00, 0x00]);
+        patterns.insert('7', [0x00, 0x7E, 0x02, 0x04, 0x08, 0x08, 0x10, 0x10, 0x20, 0x20, 0x00, 0x00]);
+        patterns.insert('8', [0x00, 0x3C, 0x42, 0x42, 0x3C, 0x42, 0x42, 0x42, 0x42, 0x3C, 0x00, 0x00]);
+        patterns.insert('9', [0x00, 0x3C, 0x42, 0x42, 0x42, 0x3E, 0x02, 0x04, 0x08, 0x70, 0x00, 0x00]);
+        
+        // Special characters
+        patterns.insert(':', [0x00, 0x00, 0x00, 0x18, 0x18, 0x00, 0x00, 0x18, 0x18, 0x00, 0x00, 0x00]);
+        patterns.insert('.', [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x00, 0x00]);
+        patterns.insert('%', [0x00, 0x62, 0x64, 0x08, 0x10, 0x10, 0x20, 0x26, 0x46, 0x00, 0x00, 0x00]);
+        patterns.insert(' ', [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        
+        patterns
     }
 
     fn set_pixel_direct(data: &mut [u8], x: usize, y: usize, width: usize, color: (u8, u8, u8)) {
@@ -665,104 +831,6 @@ impl UnifiedProcessor {
         }
     }
 
-    fn draw_overlays_on_buffer(buffer: &gst::BufferRef, detections: &[Detection]) -> Result<gst::Buffer> {
-        // Map buffer for reading
-        let map = buffer.map_readable().map_err(|e| anyhow::anyhow!("Failed to map input buffer: {}", e))?;
-        let input_data = map.as_slice();
-        
-        // Create a copy of the frame data for drawing overlays
-        let mut output_data = input_data.to_vec();
-        
-        // Assume RGB format, 640x640 resolution
-        let width = 640;
-        let height = 640;
-        let _stride = width * 3; // RGB = 3 bytes per pixel
-        
-        // Draw bounding boxes and labels
-        for detection in detections {
-            let x1 = (detection.x1 * width as f32) as i32;
-            let y1 = (detection.y1 * height as f32) as i32;
-            let x2 = (detection.x2 * width as f32) as i32;
-            let y2 = (detection.y2 * height as f32) as i32;
-            
-            // Ensure coordinates are within bounds
-            let x1 = x1.max(0).min(width as i32 - 1);
-            let y1 = y1.max(0).min(height as i32 - 1);
-            let x2 = x2.max(0).min(width as i32 - 1);
-            let y2 = y2.max(0).min(height as i32 - 1);
-            
-            // Use red color for all bounding boxes like in output.gif
-            let color = Self::get_detection_color(detection.class_id as u32);
-            
-            // Draw rectangle outline with thicker lines for better visibility
-            let thickness = 3;
-            
-            // Top edge
-            for y in y1..=(y1 + thickness).min(y2) {
-                for x in x1..=x2 {
-                    Self::set_pixel(&mut output_data, x as usize, y as usize, width, color);
-                }
-            }
-            
-            // Bottom edge
-            for y in (y2 - thickness).max(y1)..=y2 {
-                for x in x1..=x2 {
-                    Self::set_pixel(&mut output_data, x as usize, y as usize, width, color);
-                }
-            }
-            
-            // Left edge
-            for y in y1..=y2 {
-                for x in x1..=(x1 + thickness).min(x2) {
-                    Self::set_pixel(&mut output_data, x as usize, y as usize, width, color);
-                }
-            }
-            
-            // Right edge  
-            for y in y1..=y2 {
-                for x in (x2 - thickness).max(x1)..=x2 {
-                    Self::set_pixel(&mut output_data, x as usize, y as usize, width, color);
-                }
-            }
-            
-            // Skip label drawing to match the simple style of output.gif
-        }
-        
-        // Create new GStreamer buffer with overlay data
-        let mut overlay_buffer = gst::Buffer::with_size(output_data.len()).unwrap();
-        {
-            let overlay_buffer_mut = overlay_buffer.get_mut().unwrap();
-            let mut overlay_map = overlay_buffer_mut.map_writable().unwrap();
-            overlay_map.copy_from_slice(&output_data);
-        }
-        
-        // Copy timestamps and other metadata
-        if let Some(pts) = buffer.pts() {
-            overlay_buffer.get_mut().unwrap().set_pts(pts);
-        }
-        if let Some(dts) = buffer.dts() {
-            overlay_buffer.get_mut().unwrap().set_dts(dts);
-        }
-        if let Some(duration) = buffer.duration() {
-            overlay_buffer.get_mut().unwrap().set_duration(duration);
-        }
-        
-        Ok(overlay_buffer)
-    }
-    
-    fn get_detection_color(_class_id: u32) -> (u8, u8, u8) {
-        // Use red color for all bounding boxes like in output.gif
-        (255, 0, 0) // Red
-    }
-    
-    fn set_pixel(data: &mut [u8], x: usize, y: usize, width: usize, color: (u8, u8, u8)) {
-        let idx = (y * width + x) * 3;
-        if idx + 2 < data.len() {
-            data[idx] = color.0;     // R
-            data[idx + 1] = color.1; // G  
-            data[idx + 2] = color.2; // B
-        }
-    }
 
     fn process_sample_static(
         buffer: &gst::BufferRef,

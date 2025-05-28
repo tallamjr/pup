@@ -46,7 +46,7 @@ fn gst_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("Parsed arguments: {:?}", args);
 
     // Load or create configuration
-    let mut config = if let Some(config_path) = &args.config {
+    let config = if let Some(config_path) = &args.config {
         println!("Loading configuration from: {}", config_path);
         AppConfig::from_toml_file(&PathBuf::from(config_path))?
     } else {
