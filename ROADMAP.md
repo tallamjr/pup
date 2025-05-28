@@ -79,13 +79,36 @@ pub trait InferenceBackend {
     type Error;
     
     fn load_model(&mut self, path: &Path) -> Result<(), Self::Error>;
-    fn infer(&self, input: &Tensor) -> Result<Vec<Detection>, Self::Error>;
+    fn infer(&self, input: &Tensor) -> Result<TaskOutput, Self::Error>;
     fn get_input_shape(&self) -> &[usize];
+    fn get_task_type(&self) -> TaskType;
 }
 
 pub trait ModelPostProcessor {
-    fn process_raw_output(&self, output: RawInferenceOutput) -> Vec<Detection>;
-    fn apply_nms(&self, detections: Vec<Detection>) -> Vec<Detection>;
+    fn process_raw_output(&self, output: RawInferenceOutput) -> TaskOutput;
+    fn get_supported_tasks(&self) -> Vec<TaskType>;
+}
+
+#[derive(Debug, Clone)]
+pub enum TaskType {
+    ObjectDetection,
+    KeypointDetection,
+    PoseEstimation,
+    ImageClassification,
+    SemanticSegmentation,
+    InstanceSegmentation,
+    FacialRecognition,
+    ActivityRecognition,
+}
+
+#[derive(Debug, Clone)]
+pub enum TaskOutput {
+    Detections(Vec<Detection>),
+    Keypoints(Vec<Keypoint>),
+    Poses(Vec<Pose>),
+    Classifications(Vec<Classification>),
+    Segmentation(SegmentationMask),
+    Activities(Vec<Activity>),
 }
 ```
 
@@ -286,11 +309,13 @@ impl VideoFilterImpl for PupInference {}
 // filesrc location=video.mp4 ! decodebin ! videoconvert ! pupinference model-path=model.onnx confidence-threshold=0.6 ! pupoverlay ! autovideosink
 ```
 
-### 2.2 Model Plugin System
+### 2.2 Multi-Task Model Plugin System
 ```rust
 // src/models/plugin_manager.rs
 pub struct ModelPluginManager {
     registered_models: HashMap<String, Box<dyn ModelPlugin>>,
+    task_registry: HashMap<TaskType, Vec<String>>, // task -> model names
+    model_chains: HashMap<String, ModelChain>, // predefined model chains
 }
 
 pub trait ModelPlugin {
@@ -298,6 +323,29 @@ pub trait ModelPlugin {
     fn supported_tasks(&self) -> Vec<TaskType>;
     fn create_backend(&self, config: &InferenceConfig) -> Box<dyn InferenceBackend>;
     fn create_postprocessor(&self) -> Box<dyn ModelPostProcessor>;
+    fn get_metadata(&self) -> ModelMetadata;
+}
+
+#[derive(Debug, Clone)]
+pub struct ModelMetadata {
+    pub name: String,
+    pub task_type: TaskType,
+    pub input_shape: Vec<usize>,
+    pub output_format: OutputFormat,
+    pub preprocessing_requirements: PreprocessingRequirements,
+    pub performance_profile: PerformanceProfile,
+}
+
+// Support for model chaining (e.g., detect objects -> extract keypoints)
+pub struct ModelChain {
+    pub stages: Vec<ModelStage>,
+    pub fusion_strategy: Option<FusionStrategy>,
+}
+
+pub struct ModelStage {
+    pub model_name: String,
+    pub depends_on: Option<String>, // previous stage output
+    pub roi_extraction: Option<RoiExtractionStrategy>, // for keypoint detection on detected objects
 }
 ```
 
@@ -362,13 +410,39 @@ pub struct MetricsCollector {
 }
 ```
 
-### 3.3 Multi-Stream Support
+### 3.3 Multi-Stream & Multi-Task Support
 ```rust
 // src/pipeline/multi_stream.rs
 pub struct MultiStreamPipeline {
     streams: HashMap<StreamId, StreamPipeline>,
-    shared_inference: Arc<dyn InferenceBackend>,
-    scheduler: Box<dyn InferenceScheduler>,
+    model_pool: Arc<ModelPool>, // shared models across streams
+    task_scheduler: Box<dyn TaskScheduler>,
+    model_chains: HashMap<String, ModelChain>,
+}
+
+pub struct ModelPool {
+    models: HashMap<String, Arc<dyn InferenceBackend>>,
+    task_router: TaskRouter,
+    resource_manager: ResourceManager,
+}
+
+// Route frames to appropriate models based on content or configuration
+pub struct TaskRouter {
+    routing_rules: Vec<RoutingRule>,
+    default_tasks: Vec<TaskType>,
+}
+
+pub struct RoutingRule {
+    pub condition: RoutingCondition,
+    pub target_tasks: Vec<TaskType>,
+    pub priority: u8,
+}
+
+pub enum RoutingCondition {
+    SceneType(SceneType),
+    ObjectCount(usize),
+    FrameRate(f32),
+    Custom(Box<dyn Fn(&Frame) -> bool>),
 }
 ```
 
@@ -461,62 +535,378 @@ pub struct HardwareAcceleratedPipeline {
 }
 ```
 
-## Phase 5: Advanced Features (Weeks 9-10)
+## Phase 5: Performance Optimisation & Multi-Model Coordination (Weeks 9-10)
 
-### 5.1 Model Ensemble Support
+### 5.1 Multi-Model Performance Optimisation
+```rust
+// src/inference/multi_model.rs
+pub struct MultiModelInference {
+    models: HashMap<TaskType, Vec<Arc<dyn InferenceBackend>>>,
+    scheduler: ModelScheduler,
+    resource_pool: SharedResourcePool,
+}
+
+pub struct ModelScheduler {
+    execution_strategy: ExecutionStrategy,
+    load_balancer: LoadBalancer,
+    performance_monitor: PerformanceMonitor,
+}
+
+pub enum ExecutionStrategy {
+    Sequential, // Run models one after another
+    Parallel,   // Run compatible models simultaneously
+    Adaptive,   // Switch based on system resources
+    Conditional, // Run models based on previous results
+}
+
+// Example: Detect objects, then run keypoint detection only on detected people
+pub struct ConditionalExecution {
+    primary_task: TaskType,
+    conditional_tasks: HashMap<i32, TaskType>, // class_id -> task
+    roi_extractor: RoiExtractor,
+}
+```
+
+### 5.2 Advanced Model Chaining
+```rust
+// src/models/chaining.rs
+pub struct ModelChainExecutor {
+    chain_definition: ModelChain,
+    execution_context: ExecutionContext,
+    result_aggregator: ResultAggregator,
+}
+
+impl ModelChainExecutor {
+    // Execute: Object Detection -> Keypoint Detection on detected persons
+    pub async fn execute_person_keypoint_chain(&self, frame: &Frame) -> Result<ChainedResult> {
+        // Stage 1: Object detection
+        let detections = self.execute_stage("object_detection", frame).await?;
+        
+        // Stage 2: Extract person ROIs and run keypoint detection
+        let person_detections = detections.filter_by_class(PERSON_CLASS_ID);
+        let mut keypoint_results = Vec::new();
+        
+        for detection in person_detections {
+            let roi = self.extract_roi(frame, &detection);
+            let keypoints = self.execute_stage("keypoint_detection", &roi).await?;
+            keypoint_results.push((detection, keypoints));
+        }
+        
+        Ok(ChainedResult::PersonKeypoints(keypoint_results))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ChainedResult {
+    PersonKeypoints(Vec<(Detection, Vec<Keypoint>)>),
+    ObjectsWithPoses(Vec<(Detection, Pose)>),
+    ActivityWithContext(Activity, Vec<Detection>),
+}
+```
+
+## Phase 6: Advanced Multi-Task Computer Vision (Weeks 11-12)
+
+### 6.1 Computer Vision Task Library
+```rust
+// src/vision/tasks/mod.rs
+pub mod object_detection;
+pub mod keypoint_detection;
+pub mod pose_estimation;
+pub mod activity_recognition;
+pub mod facial_recognition;
+pub mod segmentation;
+
+// src/vision/tasks/keypoint_detection.rs
+#[derive(Debug, Clone)]
+pub struct Keypoint {
+    pub x: f32,
+    pub y: f32,
+    pub confidence: f32,
+    pub keypoint_type: KeypointType,
+}
+
+#[derive(Debug, Clone)]
+pub enum KeypointType {
+    // COCO-style 17 keypoints
+    Nose, LeftEye, RightEye, LeftEar, RightEar,
+    LeftShoulder, RightShoulder, LeftElbow, RightElbow,
+    LeftWrist, RightWrist, LeftHip, RightHip,
+    LeftKnee, RightKnee, LeftAnkle, RightAnkle,
+    // Face keypoints (68 points)
+    FaceLandmark(u8),
+    // Hand keypoints (21 points per hand)
+    HandLandmark(HandSide, u8),
+}
+
+#[derive(Debug, Clone)]
+pub struct Pose {
+    pub keypoints: Vec<Keypoint>,
+    pub skeleton_connections: Vec<(usize, usize)>,
+    pub pose_confidence: f32,
+    pub bounding_box: Option<BoundingBox>,
+}
+
+// src/vision/tasks/pose_estimation.rs
+pub struct PoseEstimator {
+    backend: Box<dyn InferenceBackend>,
+    pose_config: PoseConfig,
+}
+
+#[derive(Debug, Clone)]
+pub struct PoseConfig {
+    pub skeleton_type: SkeletonType,
+    pub minimum_keypoint_confidence: f32,
+    pub minimum_pose_confidence: f32,
+}
+
+#[derive(Debug, Clone)]
+pub enum SkeletonType {
+    Coco17,      // 17 keypoints for whole body
+    Body25,      // OpenPose 25 keypoints
+    Face68,      // 68 facial landmarks
+    Hand21,      // 21 hand keypoints
+    WholeBody,   // Body + Face + Hands
+}
+```
+
+### 6.2 Real-time Multi-Task Processing
+```rust
+// src/pipeline/multi_task.rs
+pub struct MultiTaskPipeline {
+    task_graph: TaskGraph,
+    execution_engine: TaskExecutionEngine,
+    result_compositor: ResultCompositor,
+}
+
+pub struct TaskGraph {
+    nodes: HashMap<TaskId, TaskNode>,
+    dependencies: HashMap<TaskId, Vec<TaskId>>,
+    execution_order: Vec<TaskId>,
+}
+
+pub struct TaskNode {
+    pub task_type: TaskType,
+    pub model_name: String,
+    pub input_requirements: InputRequirements,
+    pub output_format: OutputFormat,
+}
+
+// Example task graph: Webcam -> Object Detection -> Keypoint Detection (on persons) + Activity Recognition
+pub fn create_realtime_analysis_pipeline() -> MultiTaskPipeline {
+    let mut graph = TaskGraph::new();
+    
+    // Object detection on full frame
+    graph.add_task("object_detection", TaskType::ObjectDetection, "yolov8n");
+    
+    // Keypoint detection on detected persons
+    graph.add_task("keypoint_detection", TaskType::KeypointDetection, "pose_hrnet")
+         .depends_on("object_detection")
+         .with_filter(|detection| detection.class_id == PERSON_CLASS_ID);
+    
+    // Activity recognition on full frame
+    graph.add_task("activity_recognition", TaskType::ActivityRecognition, "slowfast")
+         .with_temporal_window(16); // 16 frames for temporal analysis
+    
+    MultiTaskPipeline::new(graph)
+}
+```
+
+### 6.3 Enhanced Visualization System
+```rust
+// src/visualization/overlay.rs
+pub struct MultiTaskOverlay {
+    renderers: HashMap<TaskType, Box<dyn TaskRenderer>>,
+    composition_strategy: CompositionStrategy,
+}
+
+pub trait TaskRenderer {
+    fn render(&self, result: &TaskOutput, canvas: &mut Canvas) -> Result<()>;
+    fn get_render_priority(&self) -> u8;
+}
+
+// src/visualization/renderers/keypoint_renderer.rs
+pub struct KeypointRenderer {
+    skeleton_config: SkeletonConfig,
+    style_config: KeypointStyleConfig,
+}
+
+impl TaskRenderer for KeypointRenderer {
+    fn render(&self, result: &TaskOutput, canvas: &mut Canvas) -> Result<()> {
+        if let TaskOutput::Keypoints(keypoints) = result {
+            for keypoint in keypoints {
+                self.draw_keypoint(canvas, keypoint)?;
+            }
+            self.draw_skeleton_connections(canvas, keypoints)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct KeypointStyleConfig {
+    pub keypoint_radius: f32,
+    pub keypoint_color: Color,
+    pub skeleton_line_width: f32,
+    pub skeleton_color: Color,
+    pub confidence_threshold: f32,
+}
+```
+
+### 6.4 Model Hub Integration for Multi-Task Models
+```rust
+// src/models/hub_integration.rs
+pub struct MultiTaskModelHub {
+    hub_client: HuggingFaceClient,
+    local_cache: ModelCache,
+    task_model_registry: TaskModelRegistry,
+}
+
+impl MultiTaskModelHub {
+    pub async fn download_keypoint_model(&self, variant: KeypointModelVariant) -> Result<ModelBundle> {
+        let repo_id = match variant {
+            KeypointModelVariant::HRNet => "microsoft/hrnet-w32-pose",
+            KeypointModelVariant::OpenPose => "openpose/body_25",
+            KeypointModelVariant::MediaPipe => "mediapipe/pose_landmark",
+        };
+        self.download_and_convert_to_onnx(repo_id).await
+    }
+    
+    pub async fn download_activity_model(&self, variant: ActivityModelVariant) -> Result<ModelBundle> {
+        let repo_id = match variant {
+            ActivityModelVariant::SlowFast => "facebookresearch/slowfast-r50",
+            ActivityModelVariant::X3D => "facebookresearch/x3d-m",
+            ActivityModelVariant::VideoMAE => "videomae/videomae-base",
+        };
+        self.download_and_convert_to_onnx(repo_id).await
+    }
+}
+```
+
+### 6.5 Example Multi-Task Configuration
+```toml
+# config/multi_task_realtime.toml
+[pipeline]
+video_source = "webcam"
+display_enabled = true
+framerate = 30
+
+[tasks]
+# Primary object detection
+[[tasks.models]]
+name = "primary_detector"
+task_type = "object_detection"
+model_path = "models/yolov8n.onnx"
+confidence_threshold = 0.5
+execution_order = 1
+
+# Keypoint detection on detected persons
+[[tasks.models]]
+name = "pose_estimator"
+task_type = "keypoint_detection"
+model_path = "models/hrnet_w32_pose.onnx"
+confidence_threshold = 0.3
+execution_order = 2
+depends_on = "primary_detector"
+filter_classes = [0]  # Person class only
+
+# Activity recognition with temporal context
+[[tasks.models]]
+name = "activity_classifier"
+task_type = "activity_recognition"
+model_path = "models/slowfast_r50.onnx"
+confidence_threshold = 0.7
+execution_order = 3
+temporal_window = 16
+
+[visualization]
+# Overlay configuration for different tasks
+[visualization.object_detection]
+enabled = true
+show_labels = true
+show_confidence = true
+bbox_color = "#FF0000"
+
+[visualization.keypoint_detection]
+enabled = true
+skeleton_type = "coco17"
+keypoint_radius = 3
+skeleton_line_width = 2
+keypoint_color = "#00FF00"
+skeleton_color = "#0000FF"
+
+[visualization.activity_recognition]
+enabled = true
+show_top_k = 3
+text_position = "top_left"
+font_size = 16
+```
+
+## Phase 7: Advanced Features & Production Readiness (Weeks 13-14)
+
+### 7.1 Model Ensemble Support
 ```rust
 // src/ensemble/mod.rs
 pub struct EnsembleInference {
     models: Vec<Box<dyn InferenceBackend>>,
     fusion_strategy: Box<dyn FusionStrategy>,
+    voting_mechanism: VotingMechanism,
 }
 
 pub trait FusionStrategy {
-    fn fuse_predictions(&self, predictions: Vec<Vec<Detection>>) -> Vec<Detection>;
+    fn fuse_detections(&self, predictions: Vec<Vec<Detection>>) -> Vec<Detection>;
+    fn fuse_keypoints(&self, predictions: Vec<Vec<Keypoint>>) -> Vec<Keypoint>;
+    fn fuse_activities(&self, predictions: Vec<Vec<Activity>>) -> Vec<Activity>;
 }
 ```
 
-### 5.2 Real-time Tracking Integration
+### 7.2 Real-time Tracking Integration
 ```rust
 // src/tracking/mod.rs
-pub struct ObjectTracker {
-    tracker_backend: Box<dyn TrackingBackend>,
-    track_history: HashMap<TrackId, Track>,
+pub struct MultiTaskTracker {
+    object_tracker: Box<dyn TrackingBackend>,
+    pose_tracker: Box<dyn PoseTrackingBackend>,
+    activity_tracker: Box<dyn ActivityTrackingBackend>,
+    track_history: HashMap<TrackId, MultiModalTrack>,
 }
 
-pub trait TrackingBackend {
-    fn update(&mut self, detections: Vec<Detection>) -> Vec<Track>;
-    fn predict(&self, track_id: TrackId) -> Option<Detection>;
+pub struct MultiModalTrack {
+    pub track_id: TrackId,
+    pub object_track: ObjectTrack,
+    pub pose_history: VecDeque<Pose>,
+    pub activity_sequence: VecDeque<Activity>,
+    pub last_updated: Instant,
 }
 ```
 
-### 5.3 Streaming and Recording
+### 7.3 Streaming and Recording
 ```rust
 // src/streaming/mod.rs
 pub struct StreamingPipeline {
     rtmp_server: RtmpServer,
     recording_manager: RecordingManager,
     quality_controller: AdaptiveQualityController,
+    multi_task_overlay: MultiTaskOverlay,
 }
 ```
 
 ## Implementation Priorities
 
 ### High Priority
-1. **Modular refactoring** - Essential for maintainability
-2. **Configuration system** - Enables easy deployment variations
-3. **ORT backend optimization** - Core inference performance
-4. **GStreamer plugin development** - Pipeline integration
+1. **✅ Modular refactoring** - Essential for maintainability (COMPLETED)
+2. **Multi-task architecture** - Support for keypoint detection, pose estimation, activity recognition
+3. **Configuration system enhancement** - Multi-model configuration support
+4. **GStreamer plugin development** - Pipeline integration with multi-task support
 
 ### Medium Priority
-1. **Model plugin system** - Extensibility for different models
-2. **Performance monitoring** - Production readiness
-3. **Multi-stream support** - Scalability
+1. **Model plugin system** - Extensibility for different computer vision tasks
+2. **Model chaining and coordination** - Sequential and parallel task execution
+3. **Performance monitoring** - Production readiness for multi-model pipelines
+4. **Enhanced visualization** - Keypoints, poses, activities overlay
 
 ### Low Priority
-1. **Ensemble inference** - Advanced ML features
-2. **Real-time tracking** - Value-added functionality
-3. **Streaming infrastructure** - Deployment features
+1. **Model ensemble support** - Advanced ML features for improved accuracy
+2. **Real-time tracking** - Multi-modal tracking across tasks
+3. **Streaming infrastructure** - Deployment features with multi-task overlays
 
 ## Migration Strategy
 
@@ -626,9 +1016,61 @@ targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
 - **clap**: CLI interface
 
 ### Model Sources
-- **Hugging Face Model Hub**: Pre-trained models with automatic downloads
+
+#### Object Detection
 - **Ultralytics**: YOLO variants (YOLOv8, YOLOv9, YOLOv10)
+- **Microsoft**: DETR, DINO variants
+- **Facebook**: DETR, Detectron2 models
+
+#### Keypoint Detection & Pose Estimation  
+- **Microsoft**: HRNet variants for pose estimation
+- **Google**: MediaPipe Pose, BlazePose
+- **CMU**: OpenPose models (Body25, COCO)
+- **Facebook**: DensePose for dense pose estimation
+
+#### Activity Recognition
+- **Facebook**: SlowFast, X3D models
+- **Google**: VideoMAE, ViViT
+- **Microsoft**: VideoSwin Transformer
+
+#### Facial Analysis
+- **MediaPipe**: Face detection and landmark detection
+- **InsightFace**: Face recognition and analysis
+- **MTCNN**: Multi-task CNN for face detection
+
+#### General Sources
+- **Hugging Face Model Hub**: Pre-trained models with automatic downloads
 - **ONNX Model Zoo**: Standard computer vision models
 - **Custom training**: Domain-specific models
 
-This roadmap transforms pup from a monolithic proof-of-concept into a production-ready, extensible video processing framework whilst maintaining the core strengths of Rust performance and GStreamer flexibility.
+## Real-time Multi-Task Computer Vision Capabilities
+
+Inspired by projects like [minitflite-cpp-example](https://github.com/tallamjr/minitflite-cpp-example), pup will support comprehensive real-time computer vision tasks:
+
+### Supported Tasks
+- **Object Detection**: Real-time detection of multiple object classes
+- **Keypoint Detection**: Human pose keypoints (COCO-17, Body25, custom)
+- **Pose Estimation**: Full body pose analysis with skeleton rendering
+- **Activity Recognition**: Temporal activity classification from video sequences
+- **Facial Analysis**: Face detection, landmark detection, recognition
+- **Segmentation**: Instance and semantic segmentation
+
+### Multi-Model Coordination
+- **Sequential Processing**: Detect objects → Extract keypoints on detected persons
+- **Parallel Processing**: Run multiple models simultaneously on same frame
+- **Conditional Processing**: Adaptive model selection based on scene content
+- **Model Chaining**: Complex pipelines with multiple processing stages
+
+### Real-time Performance
+- **Hardware Acceleration**: CoreML, Metal, CUDA support via ONNX Runtime
+- **Model Optimization**: TensorRT, OpenVINO integration
+- **Memory Management**: Zero-copy processing with GStreamer buffers
+- **Batched Inference**: Efficient processing of multiple frames
+
+### Example Use Cases
+1. **Sports Analysis**: Detect players → Extract pose keypoints → Analyze movement patterns
+2. **Security Monitoring**: Detect persons → Facial recognition → Activity classification
+3. **Fitness Applications**: Pose estimation → Form analysis → Rep counting
+4. **Retail Analytics**: Person detection → Pose analysis → Behaviour understanding
+
+This roadmap transforms pup from a monolithic proof-of-concept into a production-ready, extensible multi-task computer vision framework whilst maintaining the core strengths of Rust performance and GStreamer flexibility.
