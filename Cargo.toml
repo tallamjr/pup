@@ -53,6 +53,10 @@ path = "src/main.rs"
 name = "demo"
 path = "src/bin/demo.rs"
 
+[[bin]]
+name = "visual_demo"
+path = "src/bin/visual_demo.rs"
+
 [profile.release]
 codegen-units = 1   # Reduce number of codegen units to increase optimizations.
 lto = true          # Enable Link Time Optimization

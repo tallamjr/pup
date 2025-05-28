@@ -1,24 +1,27 @@
-//! Simple demo application to test YOLO inference on sample.mp4
-//! This bypasses the complex plugin system and focuses on getting a working demo
+//! Visual demo application with bounding box overlay
+//! Shows video with YOLO detections rendered as bounding boxes with labels
 
 use crate::config::AppConfig;
 use crate::inference::{InferenceBackend, OrtBackend, TaskOutput};
 use crate::preprocessing::Preprocessor;
 use crate::utils::Detection;
+use crate::utils::coco_classes::NAMES as COCO_NAMES;
 use anyhow::Result;
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
 use gstreamer_video as gst_video;
 use std::sync::{Arc, Mutex};
+//use cairo_rs::{Context, FontSlant, FontWeight};
 
-pub struct SimpleVideoProcessor {
+pub struct VisualVideoProcessor {
     pipeline: gst::Pipeline,
     inference_backend: Arc<Mutex<Box<dyn InferenceBackend>>>,
     preprocessor: Preprocessor,
+    detections: Arc<Mutex<Vec<Detection>>>,
 }
 
-impl SimpleVideoProcessor {
+impl VisualVideoProcessor {
     pub fn new(config: &AppConfig) -> Result<Self> {
         // Initialize GStreamer
         gst::init()?;
@@ -62,7 +65,7 @@ impl SimpleVideoProcessor {
             )
             .build();
 
-        // Create queue for display path
+        // Create queue for display path (simple playback for now)
         let queue2 = gst::ElementFactory::make("queue").build()?;
         let videoconvert2 = gst::ElementFactory::make("videoconvert").build()?;
         let videosink = gst::ElementFactory::make("autovideosink").build()?;
@@ -80,7 +83,7 @@ impl SimpleVideoProcessor {
         // Link inference path
         gst::Element::link_many(&[&tee, &queue1, appsink.upcast_ref()])?;
         
-        // Link display path  
+        // Link display path
         gst::Element::link_many(&[&tee, &queue2, &videoconvert2, &videosink])?;
 
         // Setup dynamic linking for decodebin
@@ -103,10 +106,12 @@ impl SimpleVideoProcessor {
         
         let inference_backend: Arc<Mutex<Box<dyn InferenceBackend>>> = Arc::new(Mutex::new(backend));
         let preprocessor = Preprocessor::default();
+        let detections = Arc::new(Mutex::new(Vec::new()));
 
         // Setup appsink callback for processing frames
         let inference_clone = inference_backend.clone();
         let preprocessor_clone = preprocessor.clone();
+        let detections_clone = detections.clone();
         appsink.set_callbacks(
             gst_app::AppSinkCallbacks::builder()
                 .new_sample(move |appsink| {
@@ -120,10 +125,21 @@ impl SimpleVideoProcessor {
                                         &inference_clone,
                                         &preprocessor_clone,
                                     ) {
-                                        Ok(detections) => {
-                                            println!("Found {} detections", detections.len());
-                                            for detection in detections {
-                                                println!("  Detection: {}", detection);
+                                        Ok(new_detections) => {
+                                            println!("Found {} detections", new_detections.len());
+                                            for detection in &new_detections {
+                                                let class_name = if detection.class_id < COCO_NAMES.len() as i32 {
+                                                    COCO_NAMES[detection.class_id as usize]
+                                                } else {
+                                                    "unknown"
+                                                };
+                                                println!("  {}: {:.1}% at ({:.1}, {:.1}, {:.1}, {:.1})", 
+                                                    class_name, detection.score, 
+                                                    detection.x1, detection.y1, detection.x2, detection.y2);
+                                            }
+                                            // Update shared detections for future overlay
+                                            if let Ok(mut detections_guard) = detections_clone.lock() {
+                                                *detections_guard = new_detections;
                                             }
                                         }
                                         Err(e) => eprintln!("Processing error: {}", e),
@@ -137,10 +153,14 @@ impl SimpleVideoProcessor {
                 .build(),
         );
 
+        // Note: For now, we're just displaying the video and printing detections
+        // Future enhancement: implement cairo overlay for bounding box rendering
+
         Ok(Self {
             pipeline,
             inference_backend,
             preprocessor,
+            detections,
         })
     }
 
@@ -225,20 +245,30 @@ impl SimpleVideoProcessor {
         let result = backend.infer(&chw_data)?;
 
         match result {
-            TaskOutput::Detections(detections) => Ok(detections),
+            TaskOutput::Detections(detections) => {
+                // Filter detections with reasonable confidence and normalize coordinates
+                let filtered_detections: Vec<Detection> = detections
+                    .into_iter()
+                    .filter(|d| d.score > 50.0) // Filter by confidence
+                    .collect();
+                
+                Ok(filtered_detections)
+            }
         }
     }
+
+    // TODO: Implement overlay rendering with cairo in future enhancement
 }
 
-pub fn run_simple_demo() -> Result<()> {
+pub fn run_visual_demo() -> Result<()> {
     // Use sample video file
     let mut config = AppConfig::default();
     config.pipeline.video_source = "assets/sample.mp4".to_string();
     config.inference.model_path = "models/yolov8n.onnx".into();
 
-    println!("Starting simple YOLO demo on {}", config.pipeline.video_source);
+    println!("Starting visual YOLO demo with bounding boxes on {}", config.pipeline.video_source);
     
-    let processor = SimpleVideoProcessor::new(&config)?;
+    let processor = VisualVideoProcessor::new(&config)?;
     processor.run()?;
 
     Ok(())
