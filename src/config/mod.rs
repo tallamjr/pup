@@ -229,6 +229,13 @@ impl AppConfig {
             config.input.source = video;
         }
 
+        // Rebuild pipeline with new input source (bypass existing pipeline)
+        config.pipeline = Some(PipelineConfig {
+            video_source: config.input.source.clone(),
+            display_enabled: config.output.display_enabled,
+            framerate: 30, // Default framerate
+        });
+        
         config
     }
 
