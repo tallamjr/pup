@@ -68,8 +68,43 @@ cargo run --release -- --mode live --model models/yolov8n.onnx --video assets/sa
 
 ## Troubleshooting
 
+### **ONNX Runtime Issues (dyld: missing symbol called / Abort trap: 6)**
+
+If you get the error `dyld[xxx]: missing symbol called` followed by `Abort trap: 6`, this means the ONNX Runtime library cannot be found. **Solution:**
+
+1. **Use the setup script** (recommended):
+   ```bash
+   ./setup_onnx.sh
+   ./run_with_overlays.sh sample
+   ```
+
+2. **Manual setup**:
+   ```bash
+   export DYLD_LIBRARY_PATH="/Users/$USER/.ort/lib:$DYLD_LIBRARY_PATH"
+   cargo run --release -- --config configs/sample_video_live.toml
+   ```
+
+3. **Quick test**:
+   ```bash
+   # Test with sample video
+   ./run_with_overlays.sh sample
+   
+   # Test with webcam
+   ./run_with_overlays.sh webcam
+   ```
+
+### **Other Common Issues**
+
 - **No video window**: Check that `display_enabled = true` in the config
 - **No overlays**: Ensure mode is set to `"live"` 
 - **No detections**: Lower the `confidence_threshold` value
 - **Webcam not working**: Check `device_id` or try `video = "webcam"` in command line
 - **Model not found**: Ensure `models/yolov8n.onnx` exists in your project directory
+
+### **Environment Variables**
+
+For best results, set these environment variables:
+```bash
+export DYLD_LIBRARY_PATH="/Users/$USER/.ort/lib:$DYLD_LIBRARY_PATH"
+export ORT_DYLIB_PATH="/Users/$USER/.ort/lib/libonnxruntime.dylib"
+```
