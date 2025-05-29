@@ -1,0 +1,31 @@
+# Sample Video Production Mode (Original Behaviour)
+# Usage: cargo run --release -- --config configs/sample_video_production.toml
+
+[mode]
+type = "production"
+
+[input]
+source = "assets/sample.mp4"
+
+[inference]
+backend = "ort"
+execution_providers = ["coreml", "cpu"]
+model_path = "models/yolov8n.onnx"
+confidence_threshold = 0.5
+batch_size = 1
+
+[output]
+display_enabled = true
+recording_enabled = false
+output_format = "mp4"
+
+[preprocessing]
+target_size = [640, 640]
+letterbox = true
+normalize = true
+
+# Legacy pipeline configuration for backwards compatibility
+[pipeline]
+video_source = "assets/sample.mp4"
+display_enabled = true
+framerate = 30

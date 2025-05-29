@@ -1,0 +1,27 @@
+# Webcam Live Video with Overlays Configuration
+# Usage: cargo run --release -- --config configs/webcam_live.toml
+
+[mode]
+type = "live"
+
+[input]
+source = "webcam"
+device_id = 0
+caps = "video/x-raw,width=1280,height=720,framerate=30/1"
+
+[inference]
+backend = "ort"
+execution_providers = ["coreml", "cpu"]
+model_path = "models/yolov8n.onnx"
+confidence_threshold = 0.5
+batch_size = 1
+
+[output]
+display_enabled = true
+recording_enabled = false
+output_format = "mp4"
+
+[preprocessing]
+target_size = [640, 640]
+letterbox = true
+normalize = true

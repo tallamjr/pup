@@ -90,8 +90,29 @@ fn gst_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args = Args::parse();
     println!("Parsed arguments: {:?}", args);
     
-    // Handle different modes
-    match args.mode {
+    // Handle different modes (either from args or config)
+    let config_mode = if args.config.is_some() {
+        // Load config to determine mode
+        let config_path = args.config.as_ref().unwrap();
+        match AppConfig::from_toml_file(&PathBuf::from(config_path)) {
+            Ok(config) => {
+                match config.mode.mode_type.as_str() {
+                    "live" => Some(ProcessingMode::Live),
+                    "detection" => Some(ProcessingMode::Detection),
+                    "visual" => Some(ProcessingMode::Visual),
+                    "playback" => Some(ProcessingMode::Playback),
+                    _ => Some(ProcessingMode::Production),
+                }
+            }
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+    
+    let mode = config_mode.unwrap_or(args.mode.clone());
+    
+    match mode {
         ProcessingMode::Production => run_production_mode(&args),
         ProcessingMode::Live => run_live_mode(&args),
         ProcessingMode::Visual => run_visual_mode(&args),
@@ -203,17 +224,23 @@ fn run_production_mode(args: &Args) -> Result<(), Box<dyn std::error::Error + Se
 fn run_live_mode(args: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("Starting live video mode with YOLO inference overlays...");
     
-    if args.model.is_none() {
-        return Err("--model is required for live mode".into());
-    }
-    
-    let model_path = PathBuf::from(args.model.as_ref().unwrap());
-    let video_source = args.video.as_deref().unwrap_or("webcam");
+    // Load configuration (either from file or args)
+    let (model_path, video_source) = if let Some(config_path) = &args.config {
+        let config = AppConfig::from_toml_file(&PathBuf::from(config_path))?;
+        (config.model_path().clone(), config.input.source.clone())
+    } else {
+        if args.model.is_none() {
+            return Err("--model is required for live mode when not using --config".into());
+        }
+        let model_path = PathBuf::from(args.model.as_ref().unwrap());
+        let video_source = args.video.as_deref().unwrap_or("webcam").to_string();
+        (model_path, video_source)
+    };
     
     // Initialize GStreamer
     gst::init()?;
     
-    let processor = LiveVideoProcessor::new(&model_path, video_source, args)?;
+    let processor = LiveVideoProcessor::new(&model_path, &video_source, args)?;
     processor.run()
 }
 

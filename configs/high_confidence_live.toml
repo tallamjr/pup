@@ -1,0 +1,25 @@
+# High Confidence Live Video with Overlays
+# Usage: cargo run --release -- --config configs/high_confidence_live.toml
+
+[mode]
+type = "live"
+
+[input]
+source = "assets/sample.mp4"
+
+[inference]
+backend = "ort"
+execution_providers = ["coreml", "cpu"]
+model_path = "models/yolov8n.onnx"
+confidence_threshold = 0.8  # Higher confidence threshold
+batch_size = 1
+
+[output]
+display_enabled = true
+recording_enabled = false
+output_format = "mp4"
+
+[preprocessing]
+target_size = [640, 640]
+letterbox = true
+normalize = true
