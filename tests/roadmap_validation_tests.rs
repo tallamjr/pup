@@ -3,7 +3,7 @@
 //! These tests verify that each phase of the roadmap implementation
 //! meets the specified requirements and success metrics.
 
-use pup::*;
+use gstpup::{AppConfig, InferenceConfig, InputConfig, ModeConfig, OutputConfig, PreprocessingConfig, Metrics, PerformanceMonitor, ConsoleReporter, JsonReporter, PupError};
 
 use std::path::PathBuf;
 

@@ -19,7 +19,7 @@ impl SimpleVisualProcessor {
 
         // Create a simple playback pipeline using playbin for better compatibility
         let playbin = gst::ElementFactory::make("playbin")
-            .property("uri", &format!("file://{}", std::fs::canonicalize(&config.pipeline.video_source)?.display()))
+            .property("uri", &format!("file://{}", std::fs::canonicalize(&config.input.source)?.display()))
             .build()?;
 
         // Add playbin to pipeline  
@@ -70,10 +70,10 @@ impl SimpleVisualProcessor {
 
 pub fn run_simple_visual_demo() -> Result<()> {
     let mut config = AppConfig::default();
-    config.pipeline.video_source = "assets/sample.mp4".to_string();
+    config.input.source = "assets/sample.mp4".to_string();
 
     println!("Starting simple visual YOLO demo");
-    println!("Input: {}", config.pipeline.video_source);
+    println!("Input: {}", config.input.source);
     
     let processor = SimpleVisualProcessor::new(&config)?;
     processor.run()?;

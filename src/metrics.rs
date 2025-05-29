@@ -191,9 +191,7 @@ impl Metrics {
         }
 
         if current_latency > max_latency_ms {
-            return Err(PupError::ProcessingTimeout {
-                timeout_ms: max_latency_ms as u64,
-            });
+            return Err(PupError::ProcessingTimeout(max_latency_ms as u64));
         }
 
         Ok(())
@@ -344,9 +342,7 @@ impl MetricsReporter for JsonReporter {
                 .create(true)
                 .append(true)
                 .open(&self.file_path)
-                .map_err(|e| PupError::OutputDirectoryError {
-                    path: self.file_path.clone(),
-                })?;
+                .map_err(|_e| PupError::OutputDirectoryError(self.file_path.clone()))?;
             
             writeln!(file, "{}", metrics_json)
                 .map_err(|e| PupError::Unexpected(format!("Failed to write metrics: {}", e)))?;

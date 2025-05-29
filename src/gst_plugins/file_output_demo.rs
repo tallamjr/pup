@@ -30,7 +30,7 @@ impl FileOutputProcessor {
 
         // Create source elements
         let filesrc = gst::ElementFactory::make("filesrc")
-            .property("location", &config.pipeline.video_source)
+            .property("location", &config.input.source)
             .build()?;
 
         let decodebin = gst::ElementFactory::make("decodebin").build()?;
@@ -278,13 +278,13 @@ impl FileOutputProcessor {
 pub fn run_file_output_demo(output_path: Option<&str>) -> Result<()> {
     // Use sample video file
     let mut config = AppConfig::default();
-    config.pipeline.video_source = "assets/sample.mp4".to_string();
+    config.input.source = "assets/sample.mp4".to_string();
     config.inference.model_path = "models/yolov8n.onnx".into();
 
     let output_file = output_path.unwrap_or("output_with_detections.mp4");
     
     println!("Starting file output YOLO demo");
-    println!("Input: {}", config.pipeline.video_source);
+    println!("Input: {}", config.input.source);
     println!("Output: {}", output_file);
     
     let processor = FileOutputProcessor::new(&config, output_file)?;

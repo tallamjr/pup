@@ -558,7 +558,7 @@ mod tests {
         let inference = InferenceConfig::default();
         assert_eq!(inference.backend, "ort");
         assert_eq!(inference.confidence_threshold, 0.5);
-        assert_eq!(inference.device, "auto");
+        assert_eq!(inference.device, Some("auto".to_string()));
 
         let preprocessing = PreprocessingConfig::default();
         assert_eq!(preprocessing.target_size, [640, 640]);
@@ -578,15 +578,15 @@ mod tests {
         assert!(config.validate().is_err());
         config.inference.confidence_threshold = 0.5;
 
-        // Invalid framerate
-        config.pipeline.framerate = 0;
+        // Invalid framerate - using helper to access pipeline
+        config.pipeline.as_mut().unwrap().framerate = 0;
         assert!(config.validate().is_err());
-        config.pipeline.framerate = 30;
+        config.pipeline.as_mut().unwrap().framerate = 30;
 
         // Invalid target size
-        config.preprocessing.target_size = [0, 640];
+        config.preprocessing.as_mut().unwrap().target_size = [0, 640];
         assert!(config.validate().is_err());
-        config.preprocessing.target_size = [640, 640];
+        config.preprocessing.as_mut().unwrap().target_size = [640, 640];
 
         // Invalid backend
         config.inference.backend = "invalid".to_string();
@@ -594,7 +594,7 @@ mod tests {
         config.inference.backend = "ort".to_string();
 
         // Invalid device
-        config.inference.device = "invalid".to_string();
+        config.inference.device = Some("invalid".to_string());
         assert!(config.validate().is_err());
     }
 
@@ -609,7 +609,7 @@ mod tests {
             config.inference.model_path,
             PathBuf::from("custom_model.onnx")
         );
-        assert_eq!(config.pipeline.video_source, "custom_video.mp4");
+        assert_eq!(config.input.source, "custom_video.mp4");
     }
 
     #[test]
@@ -627,13 +627,13 @@ mod tests {
         let loaded_config = AppConfig::from_toml_file(&temp_path).unwrap();
 
         assert_eq!(
-            config.pipeline.video_source,
-            loaded_config.pipeline.video_source
+            config.input.source,
+            loaded_config.input.source
         );
         assert_eq!(config.inference.backend, loaded_config.inference.backend);
         assert_eq!(
-            config.preprocessing.target_size,
-            loaded_config.preprocessing.target_size
+            config.preprocessing.as_ref().unwrap().target_size,
+            loaded_config.preprocessing.as_ref().unwrap().target_size
         );
     }
 

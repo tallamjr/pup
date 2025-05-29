@@ -40,6 +40,8 @@ pangocairo = "0.16"
 [dev-dependencies]
 tempfile = "3.8"
 criterion = { version = "0.5", features = ["html_reports"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["macros", "rt"] }
 
 [build-dependencies]
 cc = "1.0"

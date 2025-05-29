@@ -33,7 +33,7 @@ impl DetectionProcessor {
 
         // Create elements
         let filesrc = gst::ElementFactory::make("filesrc")
-            .property("location", &config.pipeline.video_source)
+            .property("location", &config.input.source)
             .build()?;
         
         let decodebin = gst::ElementFactory::make("decodebin").build()?;
@@ -277,13 +277,13 @@ impl DetectionProcessor {
 pub fn run_detection_demo(output_path: Option<&str>) -> Result<()> {
     // Use sample video file
     let mut config = AppConfig::default();
-    config.pipeline.video_source = "assets/sample.mp4".to_string();
+    config.input.source = "assets/sample.mp4".to_string();
     config.inference.model_path = "models/yolov8n.onnx".into();
 
     let output_file = output_path.unwrap_or("assets/detections.txt");
     
     println!("Starting YOLO detection demo");
-    println!("Input: {}", config.pipeline.video_source);
+    println!("Input: {}", config.input.source);
     println!("Output: {}", output_file);
     
     let processor = DetectionProcessor::new(&config, output_file)?;

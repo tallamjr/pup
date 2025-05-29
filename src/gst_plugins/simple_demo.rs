@@ -28,7 +28,7 @@ impl SimpleVideoProcessor {
 
         // Create elements
         let filesrc = gst::ElementFactory::make("filesrc")
-            .property("location", &config.pipeline.video_source)
+            .property("location", &config.input.source)
             .build()?;
 
         let decodebin = gst::ElementFactory::make("decodebin").build()?;
@@ -233,10 +233,10 @@ impl SimpleVideoProcessor {
 pub fn run_simple_demo() -> Result<()> {
     // Use sample video file
     let mut config = AppConfig::default();
-    config.pipeline.video_source = "assets/sample.mp4".to_string();
+    config.input.source = "assets/sample.mp4".to_string();
     config.inference.model_path = "models/yolov8n.onnx".into();
 
-    println!("Starting simple YOLO demo on {}", config.pipeline.video_source);
+    println!("Starting simple YOLO demo on {}", config.input.source);
     
     let processor = SimpleVideoProcessor::new(&config)?;
     processor.run()?;

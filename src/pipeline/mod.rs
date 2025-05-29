@@ -26,7 +26,7 @@ impl VideoPipeline {
         // Initialize GStreamer
         gst::init()?;
 
-        let pipeline_str = Self::build_pipeline_string(&config.pipeline)?;
+        let pipeline_str = Self::build_pipeline_string(config.pipeline.as_ref().unwrap())?;
         println!("Creating pipeline: {}", pipeline_str);
 
         let pipeline = gst::parse::launch(&pipeline_str)?
@@ -44,7 +44,7 @@ impl VideoPipeline {
         Ok(Self {
             pipeline,
             appsink,
-            _config: config.pipeline.clone(),
+            _config: config.pipeline.as_ref().unwrap().clone(),
             is_running: false,
         })
     }
@@ -319,17 +319,17 @@ mod tests {
         let mut config = AppConfig::default();
 
         // Test webcam pipeline
-        config.pipeline.video_source = "webcam".to_string();
-        config.pipeline.display_enabled = true;
-        let pipeline_str = VideoPipeline::build_pipeline_string(&config.pipeline).unwrap();
+        config.input.source = "webcam".to_string();
+        config.output.display_enabled = true;
+        let pipeline_str = VideoPipeline::build_pipeline_string(&config.get_pipeline()).unwrap();
         assert!(pipeline_str.contains("avfvideosrc"));
         assert!(pipeline_str.contains("autovideosink"));
         assert!(pipeline_str.contains("appsink name=sink"));
 
         // Test file pipeline
-        config.pipeline.video_source = "test.mp4".to_string();
-        config.pipeline.display_enabled = false;
-        let pipeline_str = VideoPipeline::build_pipeline_string(&config.pipeline).unwrap();
+        config.input.source = "test.mp4".to_string();
+        config.output.display_enabled = false;
+        let pipeline_str = VideoPipeline::build_pipeline_string(&config.get_pipeline()).unwrap();
         assert!(pipeline_str.contains("filesrc location=\"test.mp4\""));
         assert!(pipeline_str.contains("appsink name=sink"));
         assert!(!pipeline_str.contains("autovideosink"));

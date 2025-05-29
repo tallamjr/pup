@@ -31,7 +31,7 @@ impl VisualVideoProcessor {
 
         // Create elements
         let filesrc = gst::ElementFactory::make("filesrc")
-            .property("location", &config.pipeline.video_source)
+            .property("location", &config.input.source)
             .build()?;
 
         let decodebin = gst::ElementFactory::make("decodebin").build()?;
@@ -285,10 +285,10 @@ impl VisualVideoProcessor {
 pub fn run_visual_demo() -> Result<()> {
     // Use sample video file
     let mut config = AppConfig::default();
-    config.pipeline.video_source = "assets/sample.mp4".to_string();
+    config.input.source = "assets/sample.mp4".to_string();
     config.inference.model_path = "models/yolov8n.onnx".into();
 
-    println!("Starting visual YOLO demo with bounding boxes on {}", config.pipeline.video_source);
+    println!("Starting visual YOLO demo with bounding boxes on {}", config.input.source);
     
     let processor = VisualVideoProcessor::new(&config)?;
     processor.run()?;

@@ -3,9 +3,9 @@
 //! These tests validate the core functionality needed for production deployment,
 //! including error handling, configuration validation, and performance monitoring.
 
-use pup::{
+use gstpup::{
     PupError, PupResult, 
-    Metrics, PerformanceMonitor, ConsoleReporter, JsonReporter,
+    Metrics, PerformanceMonitor, ConsoleReporter, JsonReporter, MetricsReporter,
     AppConfig, InferenceConfig, InputConfig, ModeConfig, OutputConfig, PreprocessingConfig
 };
 use std::path::PathBuf;

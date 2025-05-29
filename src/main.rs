@@ -53,7 +53,7 @@ fn gst_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Create config from command line arguments
         let mut config = AppConfig::from_args(Some(args.model.clone()), args.video.clone());
         config.inference.confidence_threshold = args.confidence;
-        config.pipeline.display_enabled = !args.no_display;
+        config.output.display_enabled = !args.no_display;
         config
     };
 
@@ -89,7 +89,7 @@ fn gst_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("ONNX model loaded successfully");
 
     // Initialize preprocessor
-    let target_size = config.preprocessing.target_size;
+    let target_size = config.preprocessing.as_ref().unwrap().target_size;
     let preprocessor = Preprocessor::new(target_size[0] as i32, target_size[1] as i32);
     println!(
         "Preprocessor initialized with target size: {}x{}",
