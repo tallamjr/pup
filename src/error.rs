@@ -69,10 +69,7 @@ pub enum PupError {
     },
 
     #[error("Performance target not met: {target_fps} FPS, achieved {actual_fps} FPS")]
-    PerformanceTarget {
-        target_fps: f64,
-        actual_fps: f64,
-    },
+    PerformanceTarget { target_fps: f64, actual_fps: f64 },
 
     #[error("Frame processing timeout: {0}ms exceeded")]
     ProcessingTimeout(u64),
@@ -150,9 +147,7 @@ impl From<crate::inference::InferenceError> for PupError {
             crate::inference::InferenceError::ModelLoadError(msg) => {
                 PupError::ModelLoadError(PathBuf::from(msg))
             }
-            crate::inference::InferenceError::InferenceFailed(msg) => {
-                PupError::InferenceError(msg)
-            }
+            crate::inference::InferenceError::InferenceFailed(msg) => PupError::InferenceError(msg),
             crate::inference::InferenceError::OrtError(msg) => {
                 PupError::InferenceError(format!("ONNX Runtime error: {}", msg))
             }
@@ -170,7 +165,9 @@ impl From<toml::de::Error> for PupError {
 impl From<std::io::Error> for PupError {
     fn from(err: std::io::Error) -> Self {
         match err.kind() {
-            std::io::ErrorKind::NotFound => PupError::Unexpected(format!("File not found: {}", err)),
+            std::io::ErrorKind::NotFound => {
+                PupError::Unexpected(format!("File not found: {}", err))
+            }
             std::io::ErrorKind::PermissionDenied => {
                 PupError::PermissionDenied(PathBuf::from("unknown"))
             }
@@ -202,7 +199,11 @@ impl ErrorContext {
         if self.context.is_empty() {
             self.base_error
         } else {
-            PupError::Unexpected(format!("{}: {}", self.context.join(" -> "), self.base_error))
+            PupError::Unexpected(format!(
+                "{}: {}",
+                self.context.join(" -> "),
+                self.base_error
+            ))
         }
     }
 }

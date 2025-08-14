@@ -14,6 +14,7 @@ use gstreamer as gst;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use tracing::{debug, error, info, warn};
 
 mod live_processor;
 use live_processor::LiveVideoProcessor;
@@ -86,32 +87,29 @@ struct Args {
 
 fn gst_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Parse command line arguments
-    println!("Parsing command-line arguments...");
+    info!("Parsing command-line arguments...");
     let args = Args::parse();
-    println!("Parsed arguments: {:?}", args);
-    
+    debug!("Parsed arguments: {:?}", args);
+
     // Handle different modes (either from args or config)
-    let config_mode = if args.config.is_some() {
+    let config_mode = if let Some(config_path) = &args.config {
         // Load config to determine mode
-        let config_path = args.config.as_ref().unwrap();
         match AppConfig::from_toml_file(&PathBuf::from(config_path)) {
-            Ok(config) => {
-                match config.mode.mode_type.as_str() {
-                    "live" => Some(ProcessingMode::Live),
-                    "detection" => Some(ProcessingMode::Detection),
-                    "visual" => Some(ProcessingMode::Visual),
-                    "playback" => Some(ProcessingMode::Playback),
-                    _ => Some(ProcessingMode::Production),
-                }
-            }
+            Ok(config) => match config.mode.mode_type.as_str() {
+                "live" => Some(ProcessingMode::Live),
+                "detection" => Some(ProcessingMode::Detection),
+                "visual" => Some(ProcessingMode::Visual),
+                "playback" => Some(ProcessingMode::Playback),
+                _ => Some(ProcessingMode::Production),
+            },
             Err(_) => None,
         }
     } else {
         None
     };
-    
+
     let mode = config_mode.unwrap_or(args.mode.clone());
-    
+
     match mode {
         ProcessingMode::Production => run_production_mode(&args),
         ProcessingMode::Live => run_live_mode(&args),
@@ -122,10 +120,9 @@ fn gst_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 }
 
 fn run_production_mode(args: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-
     // Load or create configuration
     let config = if let Some(config_path) = &args.config {
-        println!("Loading configuration from: {}", config_path);
+        info!("Loading configuration from: {}", config_path);
         AppConfig::from_toml_file(&PathBuf::from(config_path))?
     } else {
         // Create config from command line arguments
@@ -139,13 +136,13 @@ fn run_production_mode(args: &Args) -> Result<(), Box<dyn std::error::Error + Se
     };
 
     // Validate configuration
-    println!("Validating configuration...");
+    info!("Validating configuration...");
     config.validate()?;
 
     // Check if model file exists
     if !config.model_exists() {
-        eprintln!(
-            "Error: ONNX model file '{}' not found.",
+        error!(
+            "ONNX model file '{}' not found",
             config.model_path().display()
         );
         return Err("Model file not found.".into());
@@ -156,23 +153,27 @@ fn run_production_mode(args: &Args) -> Result<(), Box<dyn std::error::Error + Se
         && config.video_source() != "auto"
         && config.video_source() != "webcam"
     {
-        eprintln!("Error: Video file '{}' not found.", config.video_source());
+        error!("Video file '{}' not found", config.video_source());
         return Err("Video file not found.".into());
     }
 
-    println!("Configuration validated successfully");
+    info!("Configuration validated successfully");
 
     // Initialize inference backend
-    println!("Loading ONNX model from: {}", config.model_path().display());
+    info!("Loading ONNX model from: {}", config.model_path().display());
     let mut inference_backend = OrtBackend::new();
     inference_backend.load_model(config.model_path())?;
     inference_backend.set_confidence_threshold(config.inference.confidence_threshold);
-    println!("ONNX model loaded successfully");
+    info!("ONNX model loaded successfully");
 
     // Initialize preprocessor
-    let target_size = config.preprocessing.as_ref().unwrap().target_size;
+    let preprocessing_config = config
+        .preprocessing
+        .as_ref()
+        .ok_or("Preprocessing configuration is required")?;
+    let target_size = preprocessing_config.target_size;
     let preprocessor = Preprocessor::new(target_size[0] as i32, target_size[1] as i32);
-    println!(
+    info!(
         "Preprocessor initialized with target size: {}x{}",
         target_size[0], target_size[1]
     );
@@ -182,9 +183,9 @@ fn run_production_mode(args: &Args) -> Result<(), Box<dyn std::error::Error + Se
     let frame_processor = Arc::new(frame_processor);
 
     // Create and configure video pipeline
-    println!("Setting up GStreamer pipeline...");
+    info!("Setting up GStreamer pipeline...");
     let mut pipeline = VideoPipeline::new(&config)?;
-    println!("GStreamer pipeline created successfully");
+    info!("GStreamer pipeline created successfully");
 
     // Set up frame processing callback
     let frame_processor_clone = Arc::clone(&frame_processor);
@@ -192,84 +193,97 @@ fn run_production_mode(args: &Args) -> Result<(), Box<dyn std::error::Error + Se
         .set_frame_processor(move |frame, info| frame_processor_clone.process_frame(frame, info))?;
 
     // Start the pipeline
-    println!("Starting the pipeline...");
+    info!("Starting the pipeline...");
     pipeline.start()?;
 
     // Main processing loop
-    println!("Processing video... Press Ctrl+C to stop");
+    info!("Processing video... Press Ctrl+C to stop");
     loop {
         // Process pipeline messages with a timeout
         let continue_processing = pipeline.process_messages(Some(Duration::from_millis(100)))?;
 
         if !continue_processing {
-            println!("Pipeline finished or encountered an error");
+            info!("Pipeline finished or encountered an error");
             break;
         }
 
         // Check if pipeline is still running
         if !pipeline.is_running() {
-            println!("Pipeline stopped");
+            info!("Pipeline stopped");
             break;
         }
     }
 
     // Stop the pipeline
-    println!("Stopping pipeline...");
+    info!("Stopping pipeline...");
     pipeline.stop()?;
-    println!("Pipeline stopped successfully");
+    info!("Pipeline stopped successfully");
 
     Ok(())
 }
 
 fn run_live_mode(args: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("Starting live video mode with YOLO inference overlays...");
-    
+    info!("Starting live video mode with YOLO inference overlays...");
+
     // Load configuration (either from file or args)
     let (model_path, video_source) = if let Some(config_path) = &args.config {
         let config = AppConfig::from_toml_file(&PathBuf::from(config_path))?;
         (config.model_path().clone(), config.input.source.clone())
     } else {
-        if args.model.is_none() {
-            return Err("--model is required for live mode when not using --config".into());
-        }
-        let model_path = PathBuf::from(args.model.as_ref().unwrap());
+        let model_path = args
+            .model
+            .as_ref()
+            .ok_or("--model is required for live mode when not using --config")?;
+        let model_path = PathBuf::from(model_path);
         let video_source = args.video.as_deref().unwrap_or("webcam").to_string();
         (model_path, video_source)
     };
-    
+
     // Initialize GStreamer
     gst::init()?;
-    
+
     let processor = LiveVideoProcessor::new(&model_path, &video_source, args)?;
     processor.run()
 }
 
 fn run_visual_mode(_args: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("Starting visual mode with detection output...");
-    println!("Visual mode not fully implemented yet. Use --mode live for overlay functionality.");
+    info!("Starting visual mode with detection output...");
+    warn!("Visual mode not fully implemented yet. Use --mode live for overlay functionality.");
     Ok(())
 }
 
 fn run_detection_mode(_args: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("Starting detection-only mode...");
-    println!("Detection mode not fully implemented yet. Use --mode live for overlay functionality.");
+    info!("Starting detection-only mode...");
+    warn!("Detection mode not fully implemented yet. Use --mode live for overlay functionality.");
     Ok(())
 }
 
 fn run_playback_mode(_args: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("Starting playback mode (no inference)...");
-    println!("Playback mode not fully implemented yet. Use --mode live for overlay functionality.");
+    info!("Starting playback mode (no inference)...");
+    warn!("Playback mode not fully implemented yet. Use --mode live for overlay functionality.");
     Ok(())
 }
 
 fn main() {
+    // Initialize tracing subscriber
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .with_target(false)
+        .with_thread_ids(true)
+        .with_file(true)
+        .with_line_number(true)
+        .init();
+
     // Use the platform-specific run function from common module
     let result = run(gst_main);
 
     match result {
-        Ok(()) => println!("Application completed successfully"),
+        Ok(()) => info!("Application completed successfully"),
         Err(e) => {
-            eprintln!("Application error: {}", e);
+            error!("Application error: {}", e);
             std::process::exit(1);
         }
     }

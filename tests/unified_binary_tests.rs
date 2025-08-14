@@ -1,15 +1,11 @@
 //! Integration tests for unified binary functionality
 //! Tests the unified pup binary with different subcommands and modes
 
-use std::path::PathBuf;
-use std::process::Command;
-use std::time::Duration;
-
 #[tokio::test]
 async fn test_unified_binary_modes() {
     // Test that all subcommands are available and parse correctly
     unimplemented!("TODO: Verify pup run, live, detect, benchmark commands work")
-    
+
     // Should test:
     // - pup live --input webcam (requires mock webcam)
     // - pup detect --input test_video.mp4 --output results.json
@@ -21,7 +17,7 @@ async fn test_unified_binary_modes() {
 fn test_help_commands() {
     // Test that help is available for all subcommands
     unimplemented!("TODO: Verify help text for all subcommands")
-    
+
     // Should test:
     // - pup --help
     // - pup live --help
@@ -34,7 +30,7 @@ fn test_help_commands() {
 fn test_invalid_commands() {
     // Test error handling for invalid commands
     unimplemented!("TODO: Verify graceful handling of invalid commands")
-    
+
     // Should test:
     // - pup invalid-command
     // - pup live --invalid-flag

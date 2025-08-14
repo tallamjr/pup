@@ -1,6 +1,9 @@
 //! GStreamer pipeline management
-
+//!
+//! This module provides video pipeline management using GStreamer,
+//! including frame processing, inference integration, and output handling.
 use crate::config::{AppConfig, PipelineConfig};
+use crate::error::{PupError, PupResult};
 use crate::inference::InferenceBackend;
 use crate::preprocessing::Preprocessor;
 use crate::utils::Detection;
@@ -11,6 +14,7 @@ use gstreamer_app::AppSink;
 use gstreamer_video::{VideoFrameRef, VideoInfo};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tracing::{debug, error, info, warn};
 
 /// Video processing pipeline using GStreamer
 pub struct VideoPipeline {
@@ -22,29 +26,39 @@ pub struct VideoPipeline {
 
 impl VideoPipeline {
     /// Create a new video pipeline
-    pub fn new(config: &AppConfig) -> Result<Self> {
+    pub fn new(config: &AppConfig) -> PupResult<Self> {
         // Initialize GStreamer
-        gst::init()?;
+        gst::init()
+            .map_err(|e| PupError::PipelineError(format!("GStreamer init failed: {}", e)))?;
 
-        let pipeline_str = Self::build_pipeline_string(config.pipeline.as_ref().unwrap())?;
-        println!("Creating pipeline: {}", pipeline_str);
+        let pipeline_config = config
+            .pipeline
+            .as_ref()
+            .ok_or_else(|| PupError::MissingConfigField("pipeline".to_string()))?;
+        let pipeline_str = Self::build_pipeline_string(pipeline_config).map_err(|e| {
+            PupError::PipelineError(format!("Pipeline string creation failed: {}", e))
+        })?;
+        info!("Creating pipeline: {}", pipeline_str);
 
-        let pipeline = gst::parse::launch(&pipeline_str)?
+        let pipeline = gst::parse::launch(&pipeline_str)
+            .map_err(|e| PupError::PipelineError(format!("Pipeline launch failed: {}", e)))?
             .dynamic_cast::<gst::Pipeline>()
-            .expect("Failed to cast pipeline to gst::Pipeline");
+            .map_err(|_| {
+                PupError::PipelineError("Failed to cast pipeline to gst::Pipeline".to_string())
+            })?;
 
         let appsink = pipeline
             .by_name("sink")
-            .expect("No element named 'sink'")
+            .ok_or_else(|| PupError::ElementCreationFailed("No element named 'sink'".to_string()))?
             .dynamic_cast::<AppSink>()
-            .expect("'sink' is not an AppSink");
+            .map_err(|_| PupError::ElementCreationFailed("'sink' is not an AppSink".to_string()))?;
 
-        appsink.set_property("emit-signals", &true);
+        appsink.set_property("emit-signals", true);
 
         Ok(Self {
             pipeline,
             appsink,
-            _config: config.pipeline.as_ref().unwrap().clone(),
+            _config: pipeline_config.clone(),
             is_running: false,
         })
     }
@@ -54,13 +68,13 @@ impl VideoPipeline {
         let pipeline_str = if config.video_source == "auto" || config.video_source == "webcam" {
             // Use webcam
             if config.display_enabled {
-                format!(
-                    "avfvideosrc ! videoconvert ! tee name=t \
+                "avfvideosrc ! videoconvert ! tee name=t \
                      t. ! queue ! autovideosink \
                      t. ! queue ! videoconvert ! video/x-raw,format=RGB ! appsink name=sink"
-                )
+                    .to_string()
             } else {
-                format!("avfvideosrc ! videoconvert ! video/x-raw,format=RGB ! appsink name=sink")
+                "avfvideosrc ! videoconvert ! video/x-raw,format=RGB ! appsink name=sink"
+                    .to_string()
             }
         } else {
             // Use video file
@@ -86,18 +100,22 @@ impl VideoPipeline {
     }
 
     /// Start the pipeline
-    pub fn start(&mut self) -> Result<()> {
-        self.pipeline.set_state(gst::State::Playing)?;
+    pub fn start(&mut self) -> PupResult<()> {
+        self.pipeline
+            .set_state(gst::State::Playing)
+            .map_err(|e| PupError::PipelineError(format!("Failed to start pipeline: {}", e)))?;
         self.is_running = true;
-        println!("Pipeline started");
+        info!("Pipeline started");
         Ok(())
     }
 
     /// Stop the pipeline
-    pub fn stop(&mut self) -> Result<()> {
-        self.pipeline.set_state(gst::State::Null)?;
+    pub fn stop(&mut self) -> PupResult<()> {
+        self.pipeline
+            .set_state(gst::State::Null)
+            .map_err(|e| PupError::PipelineError(format!("Failed to stop pipeline: {}", e)))?;
         self.is_running = false;
-        println!("Pipeline stopped");
+        info!("Pipeline stopped");
         Ok(())
     }
 
@@ -115,19 +133,25 @@ impl VideoPipeline {
             + 'static,
     {
         self.appsink.connect("new-sample", false, move |vals| {
-            let sink = vals[0].get::<AppSink>().unwrap();
+            let sink = match vals[0].get::<AppSink>() {
+                Ok(sink) => sink,
+                Err(e) => {
+                    error!("Failed to get AppSink from callback: {:?}", e);
+                    return Some(gst::FlowReturn::Error.to_value());
+                }
+            };
 
             if let Ok(sample) = sink.pull_sample() {
                 if let Some(buffer) = sample.buffer() {
                     if let Some(caps) = sample.caps() {
-                        if let Ok(info) = VideoInfo::from_caps(&caps) {
-                            match VideoFrameRef::from_buffer_ref_readable(&buffer, &info) {
+                        if let Ok(info) = VideoInfo::from_caps(caps) {
+                            match VideoFrameRef::from_buffer_ref_readable(buffer, &info) {
                                 Ok(frame) => {
                                     let _detections = processor(&frame, &info);
                                     // Detections are processed in the callback
                                 }
                                 Err(e) => {
-                                    eprintln!("Failed to create video frame: {:?}", e);
+                                    error!("Failed to create video frame: {:?}", e);
                                 }
                             }
                         }
@@ -141,27 +165,30 @@ impl VideoPipeline {
     }
 
     /// Process messages from the pipeline bus
-    pub fn process_messages(&self, timeout: Option<Duration>) -> Result<bool> {
-        let bus = self.pipeline.bus().unwrap();
+    pub fn process_messages(&self, timeout: Option<Duration>) -> PupResult<bool> {
+        let bus = self
+            .pipeline
+            .bus()
+            .ok_or_else(|| PupError::PipelineError("Failed to get pipeline bus".to_string()))?;
         let timeout_ns = timeout.map(|d| gst::ClockTime::from_nseconds(d.as_nanos() as u64));
 
         if let Some(msg) = bus.timed_pop(timeout_ns.unwrap_or(gst::ClockTime::ZERO)) {
             match msg.view() {
                 gst::MessageView::Eos(_) => {
-                    println!("End of stream");
+                    info!("End of stream");
                     return Ok(false);
                 }
                 gst::MessageView::Error(e) => {
-                    eprintln!("Pipeline error: {}", e.error());
-                    eprintln!("Debug info: {:?}", e.debug());
+                    error!("Pipeline error: {}", e.error());
+                    error!("Debug info: {:?}", e.debug());
                     return Ok(false);
                 }
                 gst::MessageView::Warning(w) => {
-                    eprintln!("Pipeline warning: {}", w.error());
-                    eprintln!("Debug info: {:?}", w.debug());
+                    warn!("Pipeline warning: {}", w.error());
+                    warn!("Debug info: {:?}", w.debug());
                 }
                 gst::MessageView::Info(i) => {
-                    println!("Pipeline info: {}", i.error());
+                    info!("Pipeline info: {}", i.error());
                 }
                 _ => {}
             }
@@ -223,7 +250,7 @@ impl FrameProcessor {
         let frame_data = match frame.plane_data(0) {
             Ok(data) => data,
             Err(e) => {
-                eprintln!("Failed to get frame data: {:?}", e);
+                error!("Failed to get frame data: {:?}", e);
                 return Vec::new();
             }
         };
@@ -236,7 +263,7 @@ impl FrameProcessor {
         let mat = match self.gstreamer_to_opencv_mat(frame_data, width, height, stride) {
             Ok(mat) => mat,
             Err(e) => {
-                eprintln!("Failed to convert frame to Mat: {:?}", e);
+                error!("Failed to convert frame to Mat: {:?}", e);
                 return Vec::new();
             }
         };
@@ -245,7 +272,7 @@ impl FrameProcessor {
         let tensor_data = match self.preprocessor.process(&mat) {
             Ok(data) => data,
             Err(e) => {
-                eprintln!("Preprocessing failed: {:?}", e);
+                error!("Preprocessing failed: {:?}", e);
                 return Vec::new();
             }
         };
@@ -253,19 +280,17 @@ impl FrameProcessor {
         // Run inference
         let inference_backend = self.inference_backend.lock().unwrap();
         match inference_backend.infer(&tensor_data) {
-            Ok(task_output) => {
-                match task_output {
-                    crate::inference::TaskOutput::Detections(detections) => {
-                        println!("Found {} detections", detections.len());
-                        for detection in &detections {
-                            println!("  {}", detection);
-                        }
-                        detections
+            Ok(task_output) => match task_output {
+                crate::inference::TaskOutput::Detections(detections) => {
+                    debug!("Found {} detections", detections.len());
+                    for detection in &detections {
+                        debug!("  {}", detection);
                     }
+                    detections
                 }
-            }
+            },
             Err(e) => {
-                eprintln!("Inference failed: {:?}", e);
+                error!("Inference failed: {:?}", e);
                 Vec::new()
             }
         }
@@ -321,6 +346,9 @@ mod tests {
         // Test webcam pipeline
         config.input.source = "webcam".to_string();
         config.output.display_enabled = true;
+        // Update pipeline config to reflect the new input source
+        config.pipeline = None; // Clear the existing pipeline
+        config.pipeline = Some(config.get_pipeline());
         let pipeline_str = VideoPipeline::build_pipeline_string(&config.get_pipeline()).unwrap();
         assert!(pipeline_str.contains("avfvideosrc"));
         assert!(pipeline_str.contains("autovideosink"));
@@ -329,7 +357,11 @@ mod tests {
         // Test file pipeline
         config.input.source = "test.mp4".to_string();
         config.output.display_enabled = false;
-        let pipeline_str = VideoPipeline::build_pipeline_string(&config.get_pipeline()).unwrap();
+        // Force recreation of pipeline config to reflect the new input source
+        config.pipeline = None; // Clear the existing pipeline
+        config.pipeline = Some(config.get_pipeline()); // Recreate with new input
+        let pipeline_config = config.get_pipeline();
+        let pipeline_str = VideoPipeline::build_pipeline_string(&pipeline_config).unwrap();
         assert!(pipeline_str.contains("filesrc location=\"test.mp4\""));
         assert!(pipeline_str.contains("appsink name=sink"));
         assert!(!pipeline_str.contains("autovideosink"));

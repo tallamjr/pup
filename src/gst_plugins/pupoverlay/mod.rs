@@ -1,5 +1,5 @@
 //! PupOverlay GStreamer Element
-//! 
+//!
 //! Renders computer vision results (bounding boxes, keypoints, etc.) on video frames
 
 use gstreamer as gst;

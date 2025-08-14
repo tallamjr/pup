@@ -1,15 +1,15 @@
 //! GStreamer plugins for pup computer vision framework
 
-use gstreamer as gst;
 use gst::glib;
+use gstreamer as gst;
 
+pub mod detection_demo;
+pub mod file_output_demo;
 pub mod pupinference;
 pub mod pupoverlay;
 pub mod simple_demo;
-pub mod visual_demo;
 pub mod simple_visual_demo;
-pub mod file_output_demo;
-pub mod detection_demo;
+pub mod visual_demo;
 
 // Plugin registration following gstreamer-rs patterns
 gst::plugin_define!(

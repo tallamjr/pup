@@ -1,6 +1,8 @@
 //! ONNX Runtime backend implementation
 
-use super::{InferenceBackend, InferenceError, ModelPostProcessor, YoloPostProcessor, TaskType, TaskOutput};
+use super::{
+    InferenceBackend, InferenceError, ModelPostProcessor, TaskOutput, TaskType, YoloPostProcessor,
+};
 use ort::{
     execution_providers::CoreMLExecutionProvider,
     session::{builder::GraphOptimizationLevel, Session},
@@ -8,6 +10,7 @@ use ort::{
 };
 use std::path::Path;
 use std::sync::Arc;
+use tracing::warn;
 
 /// ONNX Runtime inference backend
 pub struct OrtBackend {
@@ -167,9 +170,9 @@ impl InferenceBackend for OrtBackend {
     }
 
     fn set_confidence_threshold(&mut self, threshold: f32) {
-        if threshold < 0.0 || threshold > 1.0 {
-            eprintln!(
-                "Warning: Invalid confidence threshold {}, keeping current value {}",
+        if !(0.0..=1.0).contains(&threshold) {
+            warn!(
+                "Invalid confidence threshold {}, keeping current value {}",
                 threshold, self.confidence_threshold
             );
             return;

@@ -4,8 +4,8 @@
 use crate::config::AppConfig;
 use crate::inference::{InferenceBackend, OrtBackend, TaskOutput};
 use crate::preprocessing::Preprocessor;
-use crate::utils::Detection;
 use crate::utils::coco_classes::NAMES as COCO_NAMES;
+use crate::utils::Detection;
 use anyhow::Result;
 use gstreamer as gst;
 use gstreamer::prelude::*;
@@ -35,35 +35,49 @@ impl DetectionProcessor {
         let filesrc = gst::ElementFactory::make("filesrc")
             .property("location", &config.input.source)
             .build()?;
-        
+
         let decodebin = gst::ElementFactory::make("decodebin").build()?;
         let videoconvert = gst::ElementFactory::make("videoconvert").build()?;
         let videoscale = gst::ElementFactory::make("videoscale").build()?;
         let capsfilter = gst::ElementFactory::make("capsfilter")
-            .property("caps", &gst::Caps::builder("video/x-raw")
-                .field("format", "RGB")
-                .field("width", 640)
-                .field("height", 480)
-                .build())
+            .property(
+                "caps",
+                gst::Caps::builder("video/x-raw")
+                    .field("format", "RGB")
+                    .field("width", 640)
+                    .field("height", 480)
+                    .build(),
+            )
             .build()?;
-        
+
         let appsink = gst_app::AppSink::builder()
-            .caps(&gst::Caps::builder("video/x-raw")
-                .field("format", "RGB")
-                .field("width", 640)
-                .field("height", 480)
-                .build())
+            .caps(
+                &gst::Caps::builder("video/x-raw")
+                    .field("format", "RGB")
+                    .field("width", 640)
+                    .field("height", 480)
+                    .build(),
+            )
             .build();
 
         // Add elements to pipeline
-        pipeline.add_many(&[
-            &filesrc, &decodebin, &videoconvert, &videoscale, &capsfilter, 
-            appsink.upcast_ref()
+        pipeline.add_many([
+            &filesrc,
+            &decodebin,
+            &videoconvert,
+            &videoscale,
+            &capsfilter,
+            appsink.upcast_ref(),
         ])?;
 
         // Link static elements
         filesrc.link(&decodebin)?;
-        gst::Element::link_many(&[&videoconvert, &videoscale, &capsfilter, appsink.upcast_ref()])?;
+        gst::Element::link_many([
+            &videoconvert,
+            &videoscale,
+            &capsfilter,
+            appsink.upcast_ref(),
+        ])?;
 
         // Connect decodebin pad-added signal
         let videoconvert_clone = videoconvert.clone();
@@ -84,11 +98,12 @@ impl DetectionProcessor {
         // Setup inference backend
         let mut backend = Box::new(OrtBackend::new());
         backend.load_model(&config.inference.model_path)?;
-        
-        let inference_backend: Arc<Mutex<Box<dyn InferenceBackend>>> = Arc::new(Mutex::new(backend));
+
+        let inference_backend: Arc<Mutex<Box<dyn InferenceBackend>>> =
+            Arc::new(Mutex::new(backend));
         let preprocessor = Preprocessor::default();
         let detections = Arc::new(Mutex::new(Vec::new()));
-        
+
         // Create output file
         let output_file = Arc::new(Mutex::new(File::create(output_path)?));
         let frame_count = Arc::new(Mutex::new(0u32));
@@ -99,14 +114,14 @@ impl DetectionProcessor {
         let detections_clone = detections.clone();
         let output_file_clone = output_file.clone();
         let frame_count_clone = frame_count.clone();
-        
+
         appsink.set_callbacks(
             gst_app::AppSinkCallbacks::builder()
                 .new_sample(move |appsink| {
                     if let Ok(sample) = appsink.pull_sample() {
                         if let Some(buffer) = sample.buffer() {
                             if let Some(caps) = sample.caps() {
-                                if let Ok(info) = gst_video::VideoInfo::from_caps(&caps) {
+                                if let Ok(info) = gst_video::VideoInfo::from_caps(caps) {
                                     // Increment frame count
                                     let current_frame = {
                                         let mut count = frame_count_clone.lock().unwrap();
@@ -115,18 +130,18 @@ impl DetectionProcessor {
                                     };
 
                                     match Self::process_sample_static(
-                                        &buffer,
+                                        buffer,
                                         &info,
                                         &inference_clone,
                                         &preprocessor_clone,
                                     ) {
                                         Ok(new_detections) => {
                                             println!("Frame {}: {} detections", current_frame, new_detections.len());
-                                            
+
                                             // Write detections to file
                                             if let Ok(mut file) = output_file_clone.lock() {
                                                 let _ = writeln!(file, "Frame {}: {} detections", current_frame, new_detections.len());
-                                                
+
                                                 for detection in &new_detections {
                                                     let class_name = if (detection.class_id as usize) < COCO_NAMES.len() {
                                                         COCO_NAMES[detection.class_id as usize]
@@ -145,7 +160,7 @@ impl DetectionProcessor {
                                                 }
                                                 let _ = file.flush();
                                             }
-                                            
+
                                             // Update shared detections
                                             if let Ok(mut detections_guard) = detections_clone.lock() {
                                                 *detections_guard = new_detections;
@@ -174,7 +189,7 @@ impl DetectionProcessor {
 
     pub fn run(&self) -> Result<()> {
         println!("Starting detection processing...");
-        
+
         // Start playing
         self.pipeline.set_state(gst::State::Playing)?;
 
@@ -191,9 +206,16 @@ impl DetectionProcessor {
                     break;
                 }
                 gst::MessageView::StateChanged(state_changed) => {
-                    if state_changed.src().map(|s| s == &self.pipeline).unwrap_or(false) {
-                        println!("Pipeline state changed from {:?} to {:?}", 
-                            state_changed.old(), state_changed.current());
+                    if state_changed
+                        .src()
+                        .map(|s| s == &self.pipeline)
+                        .unwrap_or(false)
+                    {
+                        println!(
+                            "Pipeline state changed from {:?} to {:?}",
+                            state_changed.old(),
+                            state_changed.current()
+                        );
                     }
                 }
                 _ => {}
@@ -202,11 +224,11 @@ impl DetectionProcessor {
 
         // Stop pipeline
         self.pipeline.set_state(gst::State::Null)?;
-        
+
         // Final stats
         let total_frames = *self.frame_count.lock().unwrap();
         println!("Processed {} frames total", total_frames);
-        
+
         Ok(())
     }
 
@@ -217,7 +239,9 @@ impl DetectionProcessor {
         _preprocessor: &Preprocessor,
     ) -> Result<Vec<Detection>> {
         // Map buffer for reading
-        let map = buffer.map_readable().map_err(|e| anyhow::anyhow!("Failed to map buffer: {}", e))?;
+        let map = buffer
+            .map_readable()
+            .map_err(|e| anyhow::anyhow!("Failed to map buffer: {}", e))?;
         let data = map.as_slice();
 
         // Convert RGB data to f32 tensor
@@ -254,7 +278,7 @@ impl DetectionProcessor {
                 let chw_r_idx = y * width + x;
                 let chw_g_idx = width * height + y * width + x;
                 let chw_b_idx = 2 * width * height + y * width + x;
-                
+
                 chw_data[chw_r_idx] = tensor_data[hwc_idx];
                 chw_data[chw_g_idx] = tensor_data[hwc_idx + 1];
                 chw_data[chw_b_idx] = tensor_data[hwc_idx + 2];
@@ -281,15 +305,15 @@ pub fn run_detection_demo(output_path: Option<&str>) -> Result<()> {
     config.inference.model_path = "models/yolov8n.onnx".into();
 
     let output_file = output_path.unwrap_or("assets/detections.txt");
-    
+
     println!("Starting YOLO detection demo");
     println!("Input: {}", config.input.source);
     println!("Output: {}", output_file);
-    
+
     let processor = DetectionProcessor::new(&config, output_file)?;
     processor.run()?;
-    
+
     println!("Detection results saved to: {}", output_file);
-    
+
     Ok(())
 }

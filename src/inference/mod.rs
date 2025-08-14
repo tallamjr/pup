@@ -128,11 +128,13 @@ impl ModelPostProcessor for YoloPostProcessor {
         // YOLOv8 output format: [1, 84, 8400] -> flattened to [84 * 8400]
         // where 84 = 4 (bbox coords) + 80 (class scores)
         // Each of the 8400 predictions corresponds to an anchor point
-        
+
         if output.len() != 84 * 8400 {
-            return Err(InferenceError::InvalidOutputFormat(
-                format!("Expected YOLOv8 output size 84*8400={}, got {}", 84 * 8400, output.len())
-            ));
+            return Err(InferenceError::InvalidOutputFormat(format!(
+                "Expected YOLOv8 output size 84*8400={}, got {}",
+                84 * 8400,
+                output.len()
+            )));
         }
 
         let num_predictions = 8400;
@@ -153,8 +155,8 @@ impl ModelPostProcessor for YoloPostProcessor {
         // YOLOv8 output is in format [84, 8400], so we need to transpose indexing
         for i in 0..num_predictions {
             // Get bbox coordinates: output[0..4, i]
-            let cx = output[i];                    // center_x at index [0, i]
-            let cy = output[num_predictions + i];  // center_y at index [1, i]  
+            let cx = output[i]; // center_x at index [0, i]
+            let cy = output[num_predictions + i]; // center_y at index [1, i]
             let w = output[2 * num_predictions + i]; // width at index [2, i]
             let h = output[3 * num_predictions + i]; // height at index [3, i]
 
@@ -165,7 +167,8 @@ impl ModelPostProcessor for YoloPostProcessor {
             let y2 = cy + h * 0.5;
 
             // Skip detections with invalid coordinates
-            if x1 < 0.0 || y1 < 0.0 || x2 > model_width || y2 > model_height || x1 >= x2 || y1 >= y2 {
+            if x1 < 0.0 || y1 < 0.0 || x2 > model_width || y2 > model_height || x1 >= x2 || y1 >= y2
+            {
                 continue;
             }
 
@@ -183,14 +186,15 @@ impl ModelPostProcessor for YoloPostProcessor {
             }
 
             // Apply strict confidence threshold to reduce false positives
-            if best_score > 0.5 { // Much higher threshold
+            if best_score > 0.5 {
+                // Much higher threshold
                 detections.push(Detection::new(x1, y1, x2, y2, best_score, best_class));
             }
         }
 
         // Apply Non-Maximum Suppression to remove overlapping detections
         let detections_after_nms = self.apply_nms(detections, self.iou_threshold);
-        
+
         Ok(detections_after_nms)
     }
 
@@ -237,15 +241,15 @@ mod tests {
         // Create mock YOLOv8 output: correct size 84 * 8400 = 705,600 elements
         let mut output = vec![0.0f32; 84 * 8400];
         let num_predictions = 8400;
-        
+
         // Set up one detection in the first position (anchor 0)
         // YOLOv8 format is [84, 8400] - column major format
         output[0] = 320.0; // cx at index [0, 0] = 0
-        output[num_predictions] = 320.0; // cy at index [1, 0] = 8400  
+        output[num_predictions] = 320.0; // cy at index [1, 0] = 8400
         output[2 * num_predictions] = 128.0; // width at index [2, 0] = 16800
         output[3 * num_predictions] = 128.0; // height at index [3, 0] = 25200
         output[4 * num_predictions] = 0.9; // confidence for class 0 at index [4, 0] = 33600
-        // All other class confidences remain 0.0
+                                           // All other class confidences remain 0.0
 
         let input_shape = vec![1, 3, 640, 640];
         let detections = processor.process_raw_output(&output, &input_shape).unwrap();

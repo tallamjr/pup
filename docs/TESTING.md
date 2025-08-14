@@ -171,7 +171,7 @@ cargo test
 # Run only unit tests
 cargo test --test unit_tests
 
-# Run only integration tests  
+# Run only integration tests
 cargo test --test integration_tests
 
 # Run specific test
@@ -182,7 +182,7 @@ cargo test --test unit_tests test_letterbox_square_image
 ```bash
 # Run all tests including roadmap validation
 cargo test --test unit_tests
-cargo test --test integration_tests  
+cargo test --test integration_tests
 cargo test --test roadmap_validation_tests
 cargo test --test benchmark_tests
 
@@ -207,7 +207,7 @@ cargo tarpaulin --out Html
 
 ### Required Assets
 - `assets/sample.mp4` - Video file for processing tests
-- `assets/bike.jpeg` - Image file for preprocessing tests  
+- `assets/bike.jpeg` - Image file for preprocessing tests
 - `assets/seal.jpeg` - Additional image for validation
 - `models/yolov8n.onnx` - ONNX model file (optional, tests skip if missing)
 
@@ -221,7 +221,7 @@ cargo tarpaulin --out Html
 ### Success Criteria
 - **All unit tests pass**: Core functionality is correct
 - **Integration tests pass**: System works end-to-end
-- **Performance benchmarks within targets**: 
+- **Performance benchmarks within targets**:
   - Inference <10ms
   - Processing >30 FPS
   - Memory usage reasonable

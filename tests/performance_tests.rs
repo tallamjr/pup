@@ -1,17 +1,13 @@
 //! Performance and benchmarking tests
 //! Tests system performance, memory usage, and real-time capabilities
 
-use std::time::{Duration, Instant};
-use std::sync::atomic::{AtomicUsize, Ordering};
-
 mod performance_tests {
-    use super::*;
 
     #[test]
     fn benchmark_coreml_vs_cpu() {
         // Compare inference times: CoreML vs CPU
         unimplemented!("TODO: Compare inference performance between CoreML and CPU")
-        
+
         // Should benchmark:
         // - Average inference time over 100 iterations
         // - Memory usage for each provider
@@ -19,11 +15,11 @@ mod performance_tests {
         // - Batch processing performance
     }
 
-    #[test] 
+    #[test]
     fn benchmark_memory_usage() {
         // Verify memory usage stays within acceptable bounds
         unimplemented!("TODO: Verify memory usage stays within bounds")
-        
+
         // Should test:
         // - Peak memory usage during processing
         // - Memory leaks over extended operation
@@ -35,7 +31,7 @@ mod performance_tests {
     fn benchmark_realtime_performance() {
         // Verify >30fps processing capability on live video
         unimplemented!("TODO: Verify >30fps processing on live video")
-        
+
         // Should test:
         // - Frame processing rate measurement
         // - Dropped frame detection
@@ -47,7 +43,7 @@ mod performance_tests {
     fn benchmark_startup_time() {
         // Measure application startup performance
         unimplemented!("TODO: Benchmark application startup time")
-        
+
         // Should measure:
         // - Time to load model
         // - GStreamer pipeline creation time
@@ -59,7 +55,7 @@ mod performance_tests {
     fn benchmark_batch_processing() {
         // Test batch processing efficiency
         unimplemented!("TODO: Test batch processing performance")
-        
+
         // Should test:
         // - Multiple file processing
         // - Throughput optimization
@@ -71,7 +67,7 @@ mod performance_tests {
     fn stress_test_long_running() {
         // Test system stability over extended periods
         unimplemented!("TODO: Test long-running stability")
-        
+
         // Should test:
         // - 24+ hour continuous operation
         // - Memory leak detection
@@ -83,7 +79,7 @@ mod performance_tests {
     fn benchmark_concurrent_streams() {
         // Test performance with multiple concurrent video streams
         unimplemented!("TODO: Test concurrent stream processing")
-        
+
         // Should test:
         // - Multiple simultaneous video inputs
         // - Resource sharing efficiency
@@ -95,7 +91,7 @@ mod performance_tests {
     fn profile_inference_pipeline() {
         // Detailed profiling of the inference pipeline
         unimplemented!("TODO: Profile detailed inference pipeline performance")
-        
+
         // Should profile:
         // - Frame extraction time
         // - Preprocessing latency
@@ -106,7 +102,6 @@ mod performance_tests {
 }
 
 mod resource_monitoring {
-    use super::*;
 
     #[test]
     fn monitor_cpu_usage() {

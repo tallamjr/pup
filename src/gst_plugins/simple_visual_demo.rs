@@ -15,14 +15,22 @@ impl SimpleVisualProcessor {
         // Initialize GStreamer
         gst::init()?;
 
-        let pipeline = gst::Pipeline::builder().name("simple-visual-pipeline").build();
+        let pipeline = gst::Pipeline::builder()
+            .name("simple-visual-pipeline")
+            .build();
 
         // Create a simple playback pipeline using playbin for better compatibility
         let playbin = gst::ElementFactory::make("playbin")
-            .property("uri", &format!("file://{}", std::fs::canonicalize(&config.input.source)?.display()))
+            .property(
+                "uri",
+                format!(
+                    "file://{}",
+                    std::fs::canonicalize(&config.input.source)?.display()
+                ),
+            )
             .build()?;
 
-        // Add playbin to pipeline  
+        // Add playbin to pipeline
         pipeline.add(&playbin)?;
 
         Ok(Self { pipeline })
@@ -52,9 +60,16 @@ impl SimpleVisualProcessor {
                     break;
                 }
                 gst::MessageView::StateChanged(state_changed) => {
-                    if state_changed.src().map(|s| s == &self.pipeline).unwrap_or(false) {
-                        println!("Pipeline state changed from {:?} to {:?}", 
-                            state_changed.old(), state_changed.current());
+                    if state_changed
+                        .src()
+                        .map(|s| s == &self.pipeline)
+                        .unwrap_or(false)
+                    {
+                        println!(
+                            "Pipeline state changed from {:?} to {:?}",
+                            state_changed.old(),
+                            state_changed.current()
+                        );
                     }
                 }
                 _ => {}
@@ -74,9 +89,9 @@ pub fn run_simple_visual_demo() -> Result<()> {
 
     println!("Starting simple visual YOLO demo");
     println!("Input: {}", config.input.source);
-    
+
     let processor = SimpleVisualProcessor::new(&config)?;
     processor.run()?;
-    
+
     Ok(())
 }

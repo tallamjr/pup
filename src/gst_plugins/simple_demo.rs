@@ -34,7 +34,7 @@ impl SimpleVideoProcessor {
         let decodebin = gst::ElementFactory::make("decodebin").build()?;
         let videoconvert1 = gst::ElementFactory::make("videoconvert").build()?;
         let videoscale = gst::ElementFactory::make("videoscale").build()?;
-        
+
         // Create capsfilter for standardized format
         let capsfilter = gst::ElementFactory::make("capsfilter")
             .property(
@@ -49,7 +49,7 @@ impl SimpleVideoProcessor {
 
         // Create tee to split the stream
         let tee = gst::ElementFactory::make("tee").build()?;
-        
+
         // Create queue for inference path
         let queue1 = gst::ElementFactory::make("queue").build()?;
         let appsink = gst_app::AppSink::builder()
@@ -68,27 +68,36 @@ impl SimpleVideoProcessor {
         let videosink = gst::ElementFactory::make("autovideosink").build()?;
 
         // Add elements to pipeline
-        pipeline.add_many(&[
-            &filesrc, &decodebin, &videoconvert1, &videoscale, &capsfilter, &tee,
-            &queue1, appsink.upcast_ref(), &queue2, &videoconvert2, &videosink
+        pipeline.add_many([
+            &filesrc,
+            &decodebin,
+            &videoconvert1,
+            &videoscale,
+            &capsfilter,
+            &tee,
+            &queue1,
+            appsink.upcast_ref(),
+            &queue2,
+            &videoconvert2,
+            &videosink,
         ])?;
 
         // Link static elements
         filesrc.link(&decodebin)?;
-        gst::Element::link_many(&[&videoconvert1, &videoscale, &capsfilter, &tee])?;
-        
+        gst::Element::link_many([&videoconvert1, &videoscale, &capsfilter, &tee])?;
+
         // Link inference path
-        gst::Element::link_many(&[&tee, &queue1, appsink.upcast_ref()])?;
-        
-        // Link display path  
-        gst::Element::link_many(&[&tee, &queue2, &videoconvert2, &videosink])?;
+        gst::Element::link_many([&tee, &queue1, appsink.upcast_ref()])?;
+
+        // Link display path
+        gst::Element::link_many([&tee, &queue2, &videoconvert2, &videosink])?;
 
         // Setup dynamic linking for decodebin
         let videoconvert1_clone = videoconvert1.clone();
         decodebin.connect_pad_added(move |_, src_pad| {
             let caps = src_pad.current_caps().unwrap();
             let structure = caps.structure(0).unwrap();
-            
+
             if structure.name().starts_with("video/") {
                 let sink_pad = videoconvert1_clone.static_pad("sink").unwrap();
                 if src_pad.link(&sink_pad).is_err() {
@@ -100,8 +109,9 @@ impl SimpleVideoProcessor {
         // Setup inference backend
         let mut backend = Box::new(OrtBackend::new());
         backend.load_model(&config.inference.model_path)?;
-        
-        let inference_backend: Arc<Mutex<Box<dyn InferenceBackend>>> = Arc::new(Mutex::new(backend));
+
+        let inference_backend: Arc<Mutex<Box<dyn InferenceBackend>>> =
+            Arc::new(Mutex::new(backend));
         let preprocessor = Preprocessor::default();
 
         // Setup appsink callback for processing frames
@@ -113,9 +123,9 @@ impl SimpleVideoProcessor {
                     if let Ok(sample) = appsink.pull_sample() {
                         if let Some(buffer) = sample.buffer() {
                             if let Some(caps) = sample.caps() {
-                                if let Ok(info) = gst_video::VideoInfo::from_caps(&caps) {
+                                if let Ok(info) = gst_video::VideoInfo::from_caps(caps) {
                                     match Self::process_sample_static(
-                                        &buffer,
+                                        buffer,
                                         &info,
                                         &inference_clone,
                                         &preprocessor_clone,
@@ -176,7 +186,9 @@ impl SimpleVideoProcessor {
         _preprocessor: &Preprocessor,
     ) -> Result<Vec<Detection>> {
         // Map buffer for reading
-        let map = buffer.map_readable().map_err(|e| anyhow::anyhow!("Failed to map buffer: {}", e))?;
+        let map = buffer
+            .map_readable()
+            .map_err(|e| anyhow::anyhow!("Failed to map buffer: {}", e))?;
         let data = map.as_slice();
 
         // Convert RGB data to f32 tensor
@@ -213,7 +225,7 @@ impl SimpleVideoProcessor {
                 let chw_r_idx = y * width + x;
                 let chw_g_idx = width * height + y * width + x;
                 let chw_b_idx = 2 * width * height + y * width + x;
-                
+
                 chw_data[chw_r_idx] = tensor_data[hwc_idx];
                 chw_data[chw_g_idx] = tensor_data[hwc_idx + 1];
                 chw_data[chw_b_idx] = tensor_data[hwc_idx + 2];
@@ -237,7 +249,7 @@ pub fn run_simple_demo() -> Result<()> {
     config.inference.model_path = "models/yolov8n.onnx".into();
 
     println!("Starting simple YOLO demo on {}", config.input.source);
-    
+
     let processor = SimpleVideoProcessor::new(&config)?;
     processor.run()?;
 
