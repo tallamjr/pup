@@ -15,15 +15,15 @@ if [ ! -f "$ONNX_DIR/lib/libonnxruntime.dylib" ]; then
     cd /tmp
     curl -L -O "$ONNX_URL"
     tar -xzf "onnxruntime-osx-arm64-${ONNX_VERSION}.tgz"
-    
+
     # Copy library to our directory
     cp "onnxruntime-osx-arm64-${ONNX_VERSION}/lib/libonnxruntime.${ONNX_VERSION}.dylib" "$ONNX_DIR/lib/"
-    
+
     # Create symlinks
     cd "$ONNX_DIR/lib"
     ln -sf "libonnxruntime.${ONNX_VERSION}.dylib" "libonnxruntime.dylib"
     ln -sf "libonnxruntime.${ONNX_VERSION}.dylib" "libonnxruntime.1.dylib"
-    
+
     echo "ONNX Runtime installed to $ONNX_DIR/lib"
 else
     echo "ONNX Runtime already installed"
