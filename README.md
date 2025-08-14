@@ -13,6 +13,10 @@
   * [General Video and Image Processing](#general-video-and-image-processing)
   * [Alternative Projects](#alternative-projects)
 * [Usage](#usage)
+* [**`pup` (Main Binary)**](#pup-main-binary)
+* [**`demo` (Demo Binary)**](#demo-demo-binary)
+  * [Available Demo Modes:](#available-demo-modes)
+  * [Key Differences:](#key-differences)
 * [Memory Footprint](#memory-footprint)
   * [`cargo-bloat` & `cargo-size`](#cargo-bloat--cargo-size)
 * [Runtime](#runtime)
@@ -49,7 +53,7 @@ rust has several advantages in this context:
 
 ### _What?_
 
-What's going on here then? This repo uses YOLOv8 ONNX models for object detection 
+What's going on here then? This repo uses YOLOv8 ONNX models for object detection
 and applies inference to video frames using ONNX Runtime. The model itself could
 of course be switched out for any other object detection architecture, this was
 chosen as a robust approach combining `opencv` with `ONNX Runtime` for high-performance inference.
@@ -87,7 +91,7 @@ There are two main binaries available with different purposes:
 **Professional GStreamer-based video processing system**
 
 - **Architecture**: Clean, modular design using proper abstractions
-- **Pipeline**: Full GStreamer VideoPipeline with FrameProcessor architecture  
+- **Pipeline**: Full GStreamer VideoPipeline with FrameProcessor architecture
 - **Configuration**: TOML config file support + command-line arguments
 - **Purpose**: Production-ready real-time object detection system
 - **Target Users**: Production/Integration environments
@@ -104,6 +108,15 @@ cargo run --release --bin pup -- --config config.toml
 ```
 
 ## **`demo` (Demo Binary)**
+
+Run YOLO object detection on your webcam with real-time overlays:
+
+```bash
+cargo run --release --bin demo -- --mode live --input webcam
+```
+
+<img src="assets/live-demo.png" alt="Live Demo" width="500">
+
 **Feature-rich demonstration and development tool**
 
 - **Architecture**: Self-contained demo with multiple specialised modes
@@ -112,10 +125,11 @@ cargo run --release --bin pup -- --config config.toml
 - **Purpose**: Showcase capabilities, development testing, and experimentation
 - **Target Users**: Development/Demo purposes
 
+
 ### Available Demo Modes:
 
 ```bash
-# Live video with real-time YOLO bounding box overlays (⭐ recommended)
+# Live video with real-time YOLO bounding box overlays (recommended)
 cargo run --release --bin demo -- --mode live --input webcam
 cargo run --release --bin demo -- --mode live --input assets/sample.mp4
 
