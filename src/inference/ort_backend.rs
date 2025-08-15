@@ -55,6 +55,12 @@ impl OrtBackend {
         }
     }
 
+    /// Configure whether to use CoreML execution provider
+    pub fn with_coreml(&mut self, use_coreml: bool) -> &mut Self {
+        self.use_coreml = use_coreml;
+        self
+    }
+
     /// Create an optimized session with optional CoreML execution provider and CPU fallback
     fn create_session(model_path: &Path, use_coreml: bool) -> Result<Session, InferenceError> {
         let session_builder = Session::builder()
@@ -179,6 +185,10 @@ impl InferenceBackend for OrtBackend {
     }
 
     fn infer(&self, input: &[f32]) -> Result<TaskOutput, InferenceError> {
+        use std::time::Instant;
+
+        let inference_start = Instant::now();
+
         let session = self
             .session
             .as_ref()
@@ -188,15 +198,19 @@ impl InferenceBackend for OrtBackend {
         self.validate_input(input)?;
 
         // Create input tensor
+        let tensor_start = Instant::now();
         let input_tensor = self.create_input_tensor(input)?;
+        let tensor_time = tensor_start.elapsed();
 
         // Run inference
+        let session_start = Instant::now();
         let mut session_guard = session.lock().map_err(|e| {
             InferenceError::InferenceFailed(format!("Failed to acquire session lock: {}", e))
         })?;
         let outputs = session_guard
             .run(ort::inputs!["images" => input_tensor])
             .map_err(|e| InferenceError::InferenceFailed(format!("Session run failed: {}", e)))?;
+        let session_time = session_start.elapsed();
 
         // Extract output data
         let mut output_values = outputs.values();
@@ -223,6 +237,25 @@ impl InferenceBackend for OrtBackend {
 
         // Apply NMS
         detections = self.post_processor.apply_nms(detections, 0.5);
+
+        let total_time = inference_start.elapsed();
+
+        // Log detailed timing information
+        tracing::debug!(
+            "Inference timing - Total: {:.2}ms, Tensor: {:.2}ms, Session: {:.2}ms, Post-processing: {:.2}ms",
+            total_time.as_secs_f64() * 1000.0,
+            tensor_time.as_secs_f64() * 1000.0,
+            session_time.as_secs_f64() * 1000.0,
+            (total_time - tensor_time - session_time).as_secs_f64() * 1000.0
+        );
+
+        // Log inference time for benchmarking
+        tracing::info!(
+            "inference_time_ms={:.2} session_time_ms={:.2} execution_provider={}",
+            total_time.as_secs_f64() * 1000.0,
+            session_time.as_secs_f64() * 1000.0,
+            if self.use_coreml { "CoreML" } else { "CPU" }
+        );
 
         Ok(TaskOutput::Detections(detections))
     }
