@@ -9,15 +9,16 @@ use ort::{
     value::Value,
 };
 use std::path::Path;
-use std::sync::Arc;
-use tracing::warn;
+use std::sync::{Arc, Mutex};
+use tracing::{info, warn};
 
 /// ONNX Runtime inference backend
 pub struct OrtBackend {
-    session: Option<Arc<Session>>,
+    session: Option<Arc<Mutex<Session>>>,
     input_shape: Vec<usize>,
     confidence_threshold: f32,
     post_processor: Box<dyn ModelPostProcessor + Send + Sync>,
+    use_coreml: bool,
 }
 
 impl OrtBackend {
@@ -28,6 +29,7 @@ impl OrtBackend {
             input_shape: vec![1, 3, 640, 640], // Default YOLO input shape
             confidence_threshold: 0.5,
             post_processor: Box::new(YoloPostProcessor::coco_default()),
+            use_coreml: true, // Enable CoreML by default on Apple platforms
         }
     }
 
@@ -38,12 +40,24 @@ impl OrtBackend {
             input_shape: vec![1, 3, 640, 640],
             confidence_threshold: 0.5,
             post_processor,
+            use_coreml: true,
         }
     }
 
-    /// Create an optimized session with CoreML execution provider
-    fn create_session(model_path: &Path) -> Result<Session, InferenceError> {
-        let session = Session::builder()
+    /// Create a new ORT backend with CoreML disabled
+    pub fn with_cpu_only() -> Self {
+        Self {
+            session: None,
+            input_shape: vec![1, 3, 640, 640],
+            confidence_threshold: 0.5,
+            post_processor: Box::new(YoloPostProcessor::coco_default()),
+            use_coreml: false,
+        }
+    }
+
+    /// Create an optimized session with optional CoreML execution provider and CPU fallback
+    fn create_session(model_path: &Path, use_coreml: bool) -> Result<Session, InferenceError> {
+        let session_builder = Session::builder()
             .map_err(|e| {
                 InferenceError::OrtError(format!("Failed to create session builder: {}", e))
             })?
@@ -54,19 +68,70 @@ impl OrtBackend {
             .with_intra_threads(8)
             .map_err(|e| InferenceError::OrtError(format!("Failed to set intra threads: {}", e)))?;
 
-        // Try to use CoreML on Apple platforms
+        // Try CoreML first on Apple platforms if enabled
         #[cfg(target_vendor = "apple")]
-        let session = session
-            .with_execution_providers([CoreMLExecutionProvider::default().build()])
-            .map_err(|e| {
-                InferenceError::OrtError(format!("Failed to set execution providers: {}", e))
-            })?;
+        if use_coreml {
+            info!("Checking CoreML availability before creating session");
 
-        let session = session
-            .commit_from_file(model_path)
-            .map_err(|e| InferenceError::ModelLoadError(format!("Failed to load model: {}", e)))?;
+            // Check if we can safely use CoreML by testing a simple configuration
+            let coreml_available = Self::check_coreml_availability();
+
+            if coreml_available {
+                info!("CoreML availability confirmed, attempting to create session with CoreML execution provider");
+
+                let coreml_session = session_builder
+                    .clone()
+                    .with_execution_providers([CoreMLExecutionProvider::default().build()]);
+
+                match coreml_session {
+                    Ok(builder) => match builder.commit_from_file(model_path) {
+                        Ok(session) => {
+                            info!("Successfully created session with CoreML execution provider");
+                            return Ok(session);
+                        }
+                        Err(e) => {
+                            warn!("Failed to load model with CoreML execution provider: {}. Falling back to CPU", e);
+                        }
+                    },
+                    Err(e) => {
+                        warn!("Failed to configure CoreML execution provider: {}. Falling back to CPU", e);
+                    }
+                }
+            } else {
+                warn!("CoreML execution provider unavailable on this system. Using CPU execution provider");
+            }
+        }
+
+        // Fallback to CPU execution provider
+        info!("Creating session with CPU execution provider");
+        let session = session_builder.commit_from_file(model_path).map_err(|e| {
+            InferenceError::ModelLoadError(format!("Failed to load model with CPU provider: {}", e))
+        })?;
 
         Ok(session)
+    }
+
+    /// Check if CoreML execution provider is available on this system
+    #[cfg(target_vendor = "apple")]
+    fn check_coreml_availability() -> bool {
+        // Check if we're running on macOS 10.15+ (required for CoreML)
+        use std::process::Command;
+
+        if let Ok(output) = Command::new("sw_vers").arg("-productVersion").output() {
+            if let Ok(version_str) = String::from_utf8(output.stdout) {
+                let version_parts: Vec<&str> = version_str.trim().split('.').collect();
+                if let Ok(major) = version_parts.first().unwrap_or(&"0").parse::<i32>() {
+                    if let Ok(minor) = version_parts.get(1).unwrap_or(&"0").parse::<i32>() {
+                        // macOS 10.15+ (Catalina and later) support CoreML
+                        return major > 10 || (major == 10 && minor >= 15);
+                    }
+                }
+            }
+        }
+
+        // If we can't determine the version, assume CoreML is available
+        // on Apple platforms (safer default for modern systems)
+        true
     }
 
     /// Validate input tensor shape and data
@@ -83,9 +148,10 @@ impl OrtBackend {
 
     /// Convert input data to ONNX tensor
     fn create_input_tensor(&self, input: &[f32]) -> Result<Value, InferenceError> {
-        let shape: Vec<i64> = self.input_shape.iter().map(|&x| x as i64).collect();
+        let array = ndarray::Array::from_shape_vec(self.input_shape.clone(), input.to_vec())
+            .map_err(|e| InferenceError::OrtError(format!("Failed to create ndarray: {}", e)))?;
 
-        Value::from_array((shape, input.to_vec()))
+        Value::from_array(array)
             .map_err(|e| InferenceError::OrtError(format!("Failed to create input tensor: {}", e)))
             .map(|v| v.into())
     }
@@ -106,8 +172,8 @@ impl InferenceBackend for OrtBackend {
             )));
         }
 
-        let session = Self::create_session(path)?;
-        self.session = Some(Arc::new(session));
+        let session = Self::create_session(path, self.use_coreml)?;
+        self.session = Some(Arc::new(Mutex::new(session)));
 
         Ok(())
     }
@@ -125,8 +191,11 @@ impl InferenceBackend for OrtBackend {
         let input_tensor = self.create_input_tensor(input)?;
 
         // Run inference
-        let outputs = session
-            .run(vec![("images".to_owned(), input_tensor)])
+        let mut session_guard = session.lock().map_err(|e| {
+            InferenceError::InferenceFailed(format!("Failed to acquire session lock: {}", e))
+        })?;
+        let outputs = session_guard
+            .run(ort::inputs!["images" => input_tensor])
             .map_err(|e| InferenceError::InferenceFailed(format!("Session run failed: {}", e)))?;
 
         // Extract output data
@@ -135,11 +204,12 @@ impl InferenceBackend for OrtBackend {
             InferenceError::InvalidOutputFormat("No outputs received from model".to_string())
         })?;
 
-        let output_tensor = first_output.try_extract_tensor::<f32>().map_err(|e| {
+        let output_array = first_output.try_extract_array::<f32>().map_err(|e| {
             InferenceError::OrtError(format!("Failed to extract output tensor: {}", e))
         })?;
 
-        let output_data: Vec<f32> = output_tensor.view().iter().copied().collect();
+        // Convert ndarray to Vec<f32> for processing
+        let output_data: Vec<f32> = output_array.iter().copied().collect();
 
         // Process raw output to detections
         let mut detections = self
@@ -186,6 +256,7 @@ pub struct OrtBackendBuilder {
     input_shape: Vec<usize>,
     confidence_threshold: f32,
     post_processor: Option<Box<dyn ModelPostProcessor + Send + Sync>>,
+    use_coreml: bool,
 }
 
 impl OrtBackendBuilder {
@@ -195,6 +266,7 @@ impl OrtBackendBuilder {
             input_shape: vec![1, 3, 640, 640],
             confidence_threshold: 0.5,
             post_processor: None,
+            use_coreml: true, // Enable CoreML by default on Apple platforms
         }
     }
 
@@ -219,6 +291,12 @@ impl OrtBackendBuilder {
         self
     }
 
+    /// Enable or disable CoreML execution provider
+    pub fn with_coreml(mut self, enable: bool) -> Self {
+        self.use_coreml = enable;
+        self
+    }
+
     /// Build the ORT backend
     pub fn build(self) -> OrtBackend {
         let post_processor = self
@@ -230,6 +308,7 @@ impl OrtBackendBuilder {
             input_shape: self.input_shape,
             confidence_threshold: self.confidence_threshold,
             post_processor,
+            use_coreml: self.use_coreml,
         }
     }
 }
@@ -322,5 +401,20 @@ mod tests {
         let correct_input = vec![0.0f32; 1 * 3 * 640 * 640];
         let result = backend.validate_input(&correct_input);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cpu_only_backend() {
+        let backend = OrtBackend::with_cpu_only();
+        assert_eq!(backend.use_coreml, false);
+        assert_eq!(backend.get_input_shape(), &[1, 3, 640, 640]);
+        assert_eq!(backend.get_confidence_threshold(), 0.5);
+    }
+
+    #[test]
+    fn test_builder_with_coreml_disabled() {
+        let backend = OrtBackendBuilder::new().with_coreml(false).build();
+
+        assert_eq!(backend.use_coreml, false);
     }
 }
