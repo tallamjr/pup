@@ -1,605 +1,276 @@
-#[cfg(feature = "mkl")]
-extern crate intel_mkl_src;
+//! Pup video processing application
+//!
+//! Real-time object detection using GStreamer and ONNX Runtime.
 
-#[cfg(feature = "accelerate")]
-extern crate accelerate_src;
-
-use image::{DynamicImage, ImageBuffer};
-
-use opencv::{core, highgui, prelude::*, videoio};
-
-mod model;
-use model::{Multiples, YoloV8, YoloV8Pose};
-
-use candle::{DType, Device, IndexOp, Result, Tensor};
-use candle_nn::{Module, VarBuilder};
-use candle_transformers::object_detection::{non_maximum_suppression, Bbox, KeyPoint};
 use clap::{Parser, ValueEnum};
+use gstpup::{
+    config::AppConfig,
+    inference::{InferenceBackend, OrtBackend},
+    pipeline::{FrameProcessor, VideoPipeline},
+    preprocessing::Preprocessor,
+    run,
+};
+use gstreamer as gst;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
 
-// Keypoints as reported by ChatGPT :)
-// Nose
-// Left Eye
-// Right Eye
-// Left Ear
-// Right Ear
-// Left Shoulder
-// Right Shoulder
-// Left Elbow
-// Right Elbow
-// Left Wrist
-// Right Wrist
-// Left Hip
-// Right Hip
-// Left Knee
-// Right Knee
-// Left Ankle
-// Right Ankle
-const KP_CONNECTIONS: [(usize, usize); 16] = [
-    (0, 1),
-    (0, 2),
-    (1, 3),
-    (2, 4),
-    (5, 6),
-    (5, 11),
-    (6, 12),
-    (11, 12),
-    (5, 7),
-    (6, 8),
-    (7, 9),
-    (8, 10),
-    (11, 13),
-    (12, 14),
-    (13, 15),
-    (14, 16),
-];
-// Model architecture from https://github.com/ultralytics/ultralytics/issues/189
-// https://github.com/tinygrad/tinygrad/blob/master/examples/yolov8.py
+mod live_processor;
+use live_processor::LiveVideoProcessor;
 
-pub fn report_detect(
-    pred: &Tensor,
-    img: DynamicImage,
-    w: usize,
-    h: usize,
-    confidence_threshold: f32,
-    nms_threshold: f32,
-    legend_size: u32,
-) -> Result<DynamicImage> {
-    let pred = pred.to_device(&Device::Cpu)?;
-    let (pred_size, npreds) = pred.dims2()?;
-    let nclasses = pred_size - 4;
-    // The bounding boxes grouped by (maximum) class index.
-    let mut bboxes: Vec<Vec<Bbox<Vec<KeyPoint>>>> = (0..nclasses).map(|_| vec![]).collect();
-    // Extract the bounding boxes for which confidence is above the threshold.
-    for index in 0..npreds {
-        let pred = Vec::<f32>::try_from(pred.i((.., index))?)?;
-        let confidence = *pred[4..].iter().max_by(|x, y| x.total_cmp(y)).unwrap();
-        if confidence > confidence_threshold {
-            let mut class_index = 0;
-            for i in 0..nclasses {
-                if pred[4 + i] > pred[4 + class_index] {
-                    class_index = i
-                }
-            }
-            if pred[class_index + 4] > 0. {
-                let bbox = Bbox {
-                    xmin: pred[0] - pred[2] / 2.,
-                    ymin: pred[1] - pred[3] / 2.,
-                    xmax: pred[0] + pred[2] / 2.,
-                    ymax: pred[1] + pred[3] / 2.,
-                    confidence,
-                    data: vec![],
-                };
-                bboxes[class_index].push(bbox)
-            }
-        }
-    }
-
-    non_maximum_suppression(&mut bboxes, nms_threshold);
-
-    // Annotate the original image and print boxes information.
-    let (initial_h, initial_w) = (img.height(), img.width());
-    let w_ratio = initial_w as f32 / w as f32;
-    let h_ratio = initial_h as f32 / h as f32;
-    let mut img = img.to_rgb8();
-    let font = Vec::from(include_bytes!("roboto-mono-stripped.ttf") as &[u8]);
-    let font = rusttype::Font::try_from_vec(font);
-    for (class_index, bboxes_for_class) in bboxes.iter().enumerate() {
-        for b in bboxes_for_class.iter() {
-            println!("{}: {:?}", pup::utils::coco_classes::NAMES[class_index], b);
-            let xmin = (b.xmin * w_ratio) as i32;
-            let ymin = (b.ymin * h_ratio) as i32;
-            let dx = (b.xmax - b.xmin) * w_ratio;
-            let dy = (b.ymax - b.ymin) * h_ratio;
-            if dx >= 0. && dy >= 0. {
-                imageproc::drawing::draw_hollow_rect_mut(
-                    &mut img,
-                    imageproc::rect::Rect::at(xmin, ymin).of_size(dx as u32, dy as u32),
-                    image::Rgb([255, 0, 0]),
-                );
-            }
-            if legend_size > 0 {
-                if let Some(font) = font.as_ref() {
-                    imageproc::drawing::draw_filled_rect_mut(
-                        &mut img,
-                        imageproc::rect::Rect::at(xmin, ymin).of_size(dx as u32, legend_size),
-                        image::Rgb([170, 0, 0]),
-                    );
-                    let legend = format!(
-                        "{}   {:.0}%",
-                        pup::utils::coco_classes::NAMES[class_index],
-                        100. * b.confidence
-                    );
-                    imageproc::drawing::draw_text_mut(
-                        &mut img,
-                        image::Rgb([255, 255, 255]),
-                        xmin,
-                        ymin,
-                        rusttype::Scale::uniform(legend_size as f32 - 1.),
-                        font,
-                        &legend,
-                    )
-                }
-            }
-        }
-    }
-    Ok(DynamicImage::ImageRgb8(img))
+#[derive(Debug, Clone, ValueEnum)]
+enum ProcessingMode {
+    /// Process video and show detections in terminal only (no video window)
+    Detection,
+    /// Show video window with processing (detections shown in terminal)
+    Visual,
+    /// Basic video playback without inference (no detection processing)
+    Playback,
+    /// Show live video window with real-time bounding box overlays (recommended)
+    Live,
+    /// Production mode with configuration-driven processing
+    Production,
 }
 
-pub fn report_pose(
-    pred: &Tensor,
-    img: DynamicImage,
-    w: usize,
-    h: usize,
-    confidence_threshold: f32,
-    nms_threshold: f32,
-) -> Result<DynamicImage> {
-    let pred = pred.to_device(&Device::Cpu)?;
-    let (pred_size, npreds) = pred.dims2()?;
-    if pred_size != 17 * 3 + 4 + 1 {
-        candle::bail!("unexpected pred-size {pred_size}");
-    }
-    let mut bboxes = vec![];
-    // Extract the bounding boxes for which confidence is above the threshold.
-    for index in 0..npreds {
-        let pred = Vec::<f32>::try_from(pred.i((.., index))?)?;
-        let confidence = pred[4];
-        if confidence > confidence_threshold {
-            let keypoints = (0..17)
-                .map(|i| KeyPoint {
-                    x: pred[3 * i + 5],
-                    y: pred[3 * i + 6],
-                    mask: pred[3 * i + 7],
-                })
-                .collect::<Vec<_>>();
-            let bbox = Bbox {
-                xmin: pred[0] - pred[2] / 2.,
-                ymin: pred[1] - pred[3] / 2.,
-                xmax: pred[0] + pred[2] / 2.,
-                ymax: pred[1] + pred[3] / 2.,
-                confidence,
-                data: keypoints,
-            };
-            bboxes.push(bbox)
-        }
-    }
-
-    let mut bboxes = vec![bboxes];
-    non_maximum_suppression(&mut bboxes, nms_threshold);
-    let bboxes = &bboxes[0];
-
-    // Annotate the original image and print boxes information.
-    let (initial_h, initial_w) = (img.height(), img.width());
-    let w_ratio = initial_w as f32 / w as f32;
-    let h_ratio = initial_h as f32 / h as f32;
-    let mut img = img.to_rgb8();
-    for b in bboxes.iter() {
-        println!("{b:?}");
-        let xmin = (b.xmin * w_ratio) as i32;
-        let ymin = (b.ymin * h_ratio) as i32;
-        let dx = (b.xmax - b.xmin) * w_ratio;
-        let dy = (b.ymax - b.ymin) * h_ratio;
-        if dx >= 0. && dy >= 0. {
-            imageproc::drawing::draw_hollow_rect_mut(
-                &mut img,
-                imageproc::rect::Rect::at(xmin, ymin).of_size(dx as u32, dy as u32),
-                image::Rgb([255, 0, 0]),
-            );
-        }
-        for kp in b.data.iter() {
-            if kp.mask < 0.6 {
-                continue;
-            }
-            let x = (kp.x * w_ratio) as i32;
-            let y = (kp.y * h_ratio) as i32;
-            imageproc::drawing::draw_filled_circle_mut(
-                &mut img,
-                (x, y),
-                2,
-                image::Rgb([0, 255, 0]),
-            );
-        }
-
-        for &(idx1, idx2) in KP_CONNECTIONS.iter() {
-            let kp1 = &b.data[idx1];
-            let kp2 = &b.data[idx2];
-            if kp1.mask < 0.6 || kp2.mask < 0.6 {
-                continue;
-            }
-            imageproc::drawing::draw_line_segment_mut(
-                &mut img,
-                (kp1.x * w_ratio, kp1.y * h_ratio),
-                (kp2.x * w_ratio, kp2.y * h_ratio),
-                image::Rgb([255, 255, 0]),
-            );
-        }
-    }
-    Ok(DynamicImage::ImageRgb8(img))
-}
-
-#[derive(Clone, Copy, ValueEnum, Debug)]
-enum Which {
-    N,
-    S,
-    M,
-    L,
-    X,
-}
-
-#[derive(Clone, Copy, ValueEnum, Debug)]
-enum YoloTask {
-    Detect,
-    Pose,
-}
-
+/// Command line arguments
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-pub struct Args {
-    /// Run on CPU rather than on GPU.
-    #[arg(long)]
-    cpu: bool,
+#[command(author, version, about)]
+#[command(long_about = "
+Real-time object detection with YOLOv8 and GStreamer video processing.
+Supports live video overlays, webcam input, and configuration-driven processing.
 
-    /// Enable tracing (generates a trace-timestamp.json file).
-    #[arg(long)]
-    tracing: bool,
+EXAMPLES:
+  pup --mode live --model models/yolov8n.onnx --video assets/sample.mp4
+  pup --mode live --model models/yolov8n.onnx --video webcam
+  pup --mode detection --model models/yolov8n.onnx --video assets/sample.mp4
+  pup --config config.toml
 
-    /// Model weights, in safetensors format.
+")]
+struct Args {
+    /// Processing mode: production (config-driven), live (video + overlays), visual (video + terminal), detection (terminal only), playback (video only)
+    #[arg(short, long, value_enum, default_value = "production")]
+    mode: ProcessingMode,
+
+    /// Path to ONNX model (optional if using --config)
     #[arg(long)]
     model: Option<String>,
 
-    /// Model weights, in safetensors format.
+    /// Video source: file path, 'webcam', or auto-detection
     #[arg(long)]
-    video: String,
+    video: Option<String>,
 
-    /// Which model variant to use.
-    #[arg(long, value_enum, default_value_t = Which::S)]
-    which: Which,
+    /// Confidence threshold for detections (0.0 to 1.0)
+    #[arg(long, default_value = "0.5")]
+    confidence: f32,
 
-    images: Vec<String>,
+    /// Whether to disable display output
+    #[arg(long)]
+    no_display: bool,
 
-    /// Threshold for the model confidence level.
-    #[arg(long, default_value_t = 0.25)]
-    confidence_threshold: f32,
+    /// Whether to show bounding box overlays (for live mode)
+    #[arg(long, default_value = "true")]
+    show_overlays: bool,
 
-    /// Threshold for non-maximum suppression.
-    #[arg(long, default_value_t = 0.45)]
-    nms_threshold: f32,
+    /// Whether to show class labels on bounding boxes
+    #[arg(long, default_value = "true")]
+    show_labels: bool,
 
-    /// The task to be run.
-    #[arg(long, default_value = "detect")]
-    task: YoloTask,
+    /// Whether to show confidence scores on bounding boxes
+    #[arg(long, default_value = "true")]
+    show_confidence: bool,
 
-    /// The size for the legend, 0 means no legend.
-    #[arg(long, default_value_t = 14)]
-    legend_size: u32,
+    /// Path to configuration file (optional)
+    #[arg(long)]
+    config: Option<String>,
 }
 
-impl Args {
-    fn model(&self) -> anyhow::Result<std::path::PathBuf> {
-        let path = match &self.model {
-            Some(model) => std::path::PathBuf::from(model),
-            None => {
-                let api = hf_hub::api::sync::Api::new()?;
-                let api = api.model("lmz/candle-yolo-v8".to_string());
-                let size = match self.which {
-                    Which::N => "n",
-                    Which::S => "s",
-                    Which::M => "m",
-                    Which::L => "l",
-                    Which::X => "x",
-                };
-                let task = match self.task {
-                    YoloTask::Pose => "-pose",
-                    YoloTask::Detect => "",
-                };
-                api.get(&format!("yolov8{size}{task}.safetensors"))?
-            }
-        };
-        Ok(path)
-    }
-}
-
-pub trait Task: Module + Sized {
-    fn load(vb: VarBuilder, multiples: Multiples) -> Result<Self>;
-    fn report(
-        pred: &Tensor,
-        img: DynamicImage,
-        w: usize,
-        h: usize,
-        confidence_threshold: f32,
-        nms_threshold: f32,
-        legend_size: u32,
-    ) -> Result<DynamicImage>;
-}
-
-impl Task for YoloV8 {
-    fn load(vb: VarBuilder, multiples: Multiples) -> Result<Self> {
-        YoloV8::load(vb, multiples, /* num_classes=*/ 80)
-    }
-
-    fn report(
-        pred: &Tensor,
-        img: DynamicImage,
-        w: usize,
-        h: usize,
-        confidence_threshold: f32,
-        nms_threshold: f32,
-        legend_size: u32,
-    ) -> Result<DynamicImage> {
-        report_detect(
-            pred,
-            img,
-            w,
-            h,
-            confidence_threshold,
-            nms_threshold,
-            legend_size,
-        )
-    }
-}
-
-impl Task for YoloV8Pose {
-    fn load(vb: VarBuilder, multiples: Multiples) -> Result<Self> {
-        YoloV8Pose::load(vb, multiples, /* num_classes=*/ 1, (17, 3))
-    }
-
-    fn report(
-        pred: &Tensor,
-        img: DynamicImage,
-        w: usize,
-        h: usize,
-        confidence_threshold: f32,
-        nms_threshold: f32,
-        _legend_size: u32,
-    ) -> Result<DynamicImage> {
-        report_pose(pred, img, w, h, confidence_threshold, nms_threshold)
-    }
-}
-
-fn dynamic_image_to_mat(image: DynamicImage) -> opencv::Result<Mat> {
-    // Copy image data to Mat
-    let mut mat = Mat::new_rows_cols_with_default(
-        image.height().try_into()?,
-        image.width().try_into()?,
-        core::CV_8UC3 as i32,
-        core::Scalar::all(0.),
-    )?;
-    mat.data_bytes_mut()?.copy_from_slice(image.as_bytes());
-
-    Ok(mat)
-}
-
-fn mat_to_dynamic_image(mat: &Mat) -> DynamicImage {
-    let mat_size = mat.size().unwrap();
-    let width = mat_size.width;
-    let height = mat_size.height;
-    // let mat_type = mat.typ();
-
-    // let channels = core::CV_8UC3 as u8;
-    // assert!(channels == 3, "Expected 3 channels for RGB image");
-
-    let data = mat.data_bytes().unwrap();
-    let image_buffer: ImageBuffer<image::Rgb<u8>, Vec<u8>> =
-        ImageBuffer::from_raw(width as u32, height as u32, data.to_vec()).unwrap();
-
-    DynamicImage::ImageRgb8(image_buffer)
-}
-
-pub fn run<T: Task>(args: Args) -> anyhow::Result<()> {
-    let device = pup::device(args.cpu)?;
-    // Create the model and load the weights from the file.
-    let multiples = match args.which {
-        Which::N => Multiples::n(),
-        Which::S => Multiples::s(),
-        Which::M => Multiples::m(),
-        Which::L => Multiples::l(),
-        Which::X => Multiples::x(),
-    };
-    let model = args.model()?;
-    let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[model], DType::F32, &device)? };
-    let model = T::load(vb, multiples)?;
-    println!("model loaded");
-
-    let window = "video capture";
-    highgui::named_window(window, 1)?;
-
-    let file_name = std::path::PathBuf::from(args.video)
-        .into_os_string()
-        .into_string()
-        .unwrap();
-    let mut cam = videoio::VideoCapture::from_file(&file_name, videoio::CAP_ANY)?;
-    let opened_file = videoio::VideoCapture::open_file(&mut cam, &file_name, videoio::CAP_ANY)?;
-    if !opened_file {
-        panic!("Unable to open video file2!");
-    };
-
-    let mut frame_count: u8 = 0;
-
-    let mut frame = core::Mat::default();
-    let frame_read = videoio::VideoCapture::read(&mut cam, &mut frame)?;
-    if !frame_read {
-        panic!("Unable to read from video file!");
-    };
-    let opened = videoio::VideoCapture::is_opened(&mut cam)?;
-    println!("Opened? {}", opened);
-    if !opened {
-        panic!("Unable to open video file!");
-    };
-
-    // Define the frame skip interval (read every nth frame)
-    let n: u8 = 5;
-
-    loop {
-        videoio::VideoCapture::read(&mut cam, &mut frame)?;
-        if frame.size()?.width > 0 {
-            highgui::imshow(window, &frame)?;
-
-            frame_count += 1;
-            // Skip frames until reaching the nth frame
-            if frame_count % n != 0 {
-                continue;
-            }
-
-            // Process the nth frame
-            println!("Processing frame {}", frame_count);
-
-            // let original_image = frame.to_image()?;
-            let original_image = mat_to_dynamic_image(&frame);
-
-            let (width, height) = {
-                let w = original_image.width() as usize;
-                let h = original_image.height() as usize;
-                if w < h {
-                    let w = w * 640 / h;
-                    // Sizes have to be divisible by 32.
-                    (w / 32 * 32, 640)
-                } else {
-                    let h = h * 640 / w;
-                    (640, h / 32 * 32)
-                }
-            };
-            let image_t = {
-                let img = original_image.resize_exact(
-                    width as u32,
-                    height as u32,
-                    image::imageops::FilterType::CatmullRom,
-                );
-                let data = img.to_rgb8().into_raw();
-                Tensor::from_vec(
-                    data,
-                    (img.height() as usize, img.width() as usize, 3),
-                    &device,
-                )?
-                .permute((2, 0, 1))?
-            };
-            let image_t = (image_t.unsqueeze(0)?.to_dtype(DType::F32)? * (1. / 255.))?;
-            let predictions = model.forward(&image_t)?.squeeze(0)?;
-            println!("generated predictions {predictions:?}");
-            let image_t = T::report(
-                &predictions,
-                original_image,
-                width,
-                height,
-                args.confidence_threshold,
-                args.nms_threshold,
-                args.legend_size,
-            )?;
-
-            let image_t_name = format!("assets/frame_{frame_count:03}.jpg");
-            image_t.save(image_t_name)?;
-
-            frame = dynamic_image_to_mat(image_t)?;
-
-            let mut bgr_img_mat = Mat::default();
-
-            opencv::imgproc::cvt_color(
-                &mut frame,
-                &mut bgr_img_mat,
-                opencv::imgproc::COLOR_RGB2BGR,
-                0,
-            )?;
-
-            // highgui::imshow(window, &bgr_img_mat)?;
-            highgui::imshow(window, &frame)?;
-
-            let key = highgui::wait_key(1)?;
-            if key > 0 && key != 255 {
-                videoio::VideoCapture::release(&mut cam)?;
-                break;
-            }
-        } else {
-            println!("No more frames!");
-            videoio::VideoCapture::release(&mut cam)?;
-            break ();
-        }
-    }
-    // candle section
-    for image_name in args.images.iter() {
-        println!("processing {image_name}");
-        let image_name = std::path::PathBuf::from(image_name);
-        let original_image = image::io::Reader::open(&image_name)?
-            .decode()
-            .map_err(candle::Error::wrap)?;
-
-        let (width, height) = {
-            let w = original_image.width() as usize;
-            let h = original_image.height() as usize;
-            if w < h {
-                let w = w * 640 / h;
-                // Sizes have to be divisible by 32.
-                (w / 32 * 32, 640)
-            } else {
-                let h = h * 640 / w;
-                (640, h / 32 * 32)
-            }
-        };
-        let image_t = {
-            let img = original_image.resize_exact(
-                width as u32,
-                height as u32,
-                image::imageops::FilterType::CatmullRom,
-            );
-            let data = img.to_rgb8().into_raw();
-            Tensor::from_vec(
-                data,
-                (img.height() as usize, img.width() as usize, 3),
-                &device,
-            )?
-            .permute((2, 0, 1))?
-        };
-        let image_t = (image_t.unsqueeze(0)?.to_dtype(DType::F32)? * (1. / 255.))?;
-        let predictions = model.forward(&image_t)?.squeeze(0)?;
-        println!("generated predictions {predictions:?}");
-        let _image_t = T::report(
-            &predictions,
-            original_image,
-            width,
-            height,
-            args.confidence_threshold,
-            args.nms_threshold,
-            args.legend_size,
-        )?;
-    }
-
-    Ok(())
-}
-
-pub fn main() -> anyhow::Result<()> {
-    use tracing_chrome::ChromeLayerBuilder;
-    use tracing_subscriber::prelude::*;
-
+fn gst_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Parse command line arguments
+    println!("Parsing command-line arguments...");
     let args = Args::parse();
-
-    let _guard = if args.tracing {
-        let (chrome_layer, guard) = ChromeLayerBuilder::new().build();
-        tracing_subscriber::registry().with(chrome_layer).init();
-        Some(guard)
+    println!("Parsed arguments: {:?}", args);
+    
+    // Handle different modes (either from args or config)
+    let config_mode = if args.config.is_some() {
+        // Load config to determine mode
+        let config_path = args.config.as_ref().unwrap();
+        match AppConfig::from_toml_file(&PathBuf::from(config_path)) {
+            Ok(config) => {
+                match config.mode.mode_type.as_str() {
+                    "live" => Some(ProcessingMode::Live),
+                    "detection" => Some(ProcessingMode::Detection),
+                    "visual" => Some(ProcessingMode::Visual),
+                    "playback" => Some(ProcessingMode::Playback),
+                    _ => Some(ProcessingMode::Production),
+                }
+            }
+            Err(_) => None,
+        }
     } else {
         None
     };
-
-    match args.task {
-        YoloTask::Detect => run::<YoloV8>(args)?,
-        YoloTask::Pose => run::<YoloV8Pose>(args)?,
+    
+    let mode = config_mode.unwrap_or(args.mode.clone());
+    
+    match mode {
+        ProcessingMode::Production => run_production_mode(&args),
+        ProcessingMode::Live => run_live_mode(&args),
+        ProcessingMode::Visual => run_visual_mode(&args),
+        ProcessingMode::Detection => run_detection_mode(&args),
+        ProcessingMode::Playback => run_playback_mode(&args),
     }
+}
+
+fn run_production_mode(args: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+
+    // Load or create configuration
+    let config = if let Some(config_path) = &args.config {
+        println!("Loading configuration from: {}", config_path);
+        AppConfig::from_toml_file(&PathBuf::from(config_path))?
+    } else {
+        // Create config from command line arguments
+        if args.model.is_none() {
+            return Err("--model is required when not using --config".into());
+        }
+        let mut config = AppConfig::from_args(args.model.clone(), args.video.clone());
+        config.inference.confidence_threshold = args.confidence;
+        config.output.display_enabled = !args.no_display;
+        config
+    };
+
+    // Validate configuration
+    println!("Validating configuration...");
+    config.validate()?;
+
+    // Check if model file exists
+    if !config.model_exists() {
+        eprintln!(
+            "Error: ONNX model file '{}' not found.",
+            config.model_path().display()
+        );
+        return Err("Model file not found.".into());
+    }
+
+    // Check if video file exists (for file sources)
+    if !config.video_exists()
+        && config.video_source() != "auto"
+        && config.video_source() != "webcam"
+    {
+        eprintln!("Error: Video file '{}' not found.", config.video_source());
+        return Err("Video file not found.".into());
+    }
+
+    println!("Configuration validated successfully");
+
+    // Initialize inference backend
+    println!("Loading ONNX model from: {}", config.model_path().display());
+    let mut inference_backend = OrtBackend::new();
+    inference_backend.load_model(config.model_path())?;
+    inference_backend.set_confidence_threshold(config.inference.confidence_threshold);
+    println!("ONNX model loaded successfully");
+
+    // Initialize preprocessor
+    let target_size = config.preprocessing.as_ref().unwrap().target_size;
+    let preprocessor = Preprocessor::new(target_size[0] as i32, target_size[1] as i32);
+    println!(
+        "Preprocessor initialized with target size: {}x{}",
+        target_size[0], target_size[1]
+    );
+
+    // Create frame processor
+    let frame_processor = FrameProcessor::new(preprocessor, Box::new(inference_backend));
+    let frame_processor = Arc::new(frame_processor);
+
+    // Create and configure video pipeline
+    println!("Setting up GStreamer pipeline...");
+    let mut pipeline = VideoPipeline::new(&config)?;
+    println!("GStreamer pipeline created successfully");
+
+    // Set up frame processing callback
+    let frame_processor_clone = Arc::clone(&frame_processor);
+    pipeline
+        .set_frame_processor(move |frame, info| frame_processor_clone.process_frame(frame, info))?;
+
+    // Start the pipeline
+    println!("Starting the pipeline...");
+    pipeline.start()?;
+
+    // Main processing loop
+    println!("Processing video... Press Ctrl+C to stop");
+    loop {
+        // Process pipeline messages with a timeout
+        let continue_processing = pipeline.process_messages(Some(Duration::from_millis(100)))?;
+
+        if !continue_processing {
+            println!("Pipeline finished or encountered an error");
+            break;
+        }
+
+        // Check if pipeline is still running
+        if !pipeline.is_running() {
+            println!("Pipeline stopped");
+            break;
+        }
+    }
+
+    // Stop the pipeline
+    println!("Stopping pipeline...");
+    pipeline.stop()?;
+    println!("Pipeline stopped successfully");
+
     Ok(())
+}
+
+fn run_live_mode(args: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("Starting live video mode with YOLO inference overlays...");
+    
+    // Load configuration (either from file or args)
+    let (model_path, video_source) = if let Some(config_path) = &args.config {
+        let config = AppConfig::from_toml_file(&PathBuf::from(config_path))?;
+        (config.model_path().clone(), config.input.source.clone())
+    } else {
+        if args.model.is_none() {
+            return Err("--model is required for live mode when not using --config".into());
+        }
+        let model_path = PathBuf::from(args.model.as_ref().unwrap());
+        let video_source = args.video.as_deref().unwrap_or("webcam").to_string();
+        (model_path, video_source)
+    };
+    
+    // Initialize GStreamer
+    gst::init()?;
+    
+    let processor = LiveVideoProcessor::new(&model_path, &video_source, args)?;
+    processor.run()
+}
+
+fn run_visual_mode(_args: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("Starting visual mode with detection output...");
+    println!("Visual mode not fully implemented yet. Use --mode live for overlay functionality.");
+    Ok(())
+}
+
+fn run_detection_mode(_args: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("Starting detection-only mode...");
+    println!("Detection mode not fully implemented yet. Use --mode live for overlay functionality.");
+    Ok(())
+}
+
+fn run_playback_mode(_args: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("Starting playback mode (no inference)...");
+    println!("Playback mode not fully implemented yet. Use --mode live for overlay functionality.");
+    Ok(())
+}
+
+fn main() {
+    // Use the platform-specific run function from common module
+    let result = run(gst_main);
+
+    match result {
+        Ok(()) => println!("Application completed successfully"),
+        Err(e) => {
+            eprintln!("Application error: {}", e);
+            std::process::exit(1);
+        }
+    }
 }

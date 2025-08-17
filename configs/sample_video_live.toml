@@ -1,0 +1,25 @@
+# Sample Video with Live Overlays Configuration
+# Usage: cargo run --release -- --config configs/sample_video_live.toml
+
+[mode]
+type = "live"
+
+[input]
+source = "assets/sample.mp4"
+
+[inference]
+backend = "ort"
+execution_providers = ["coreml", "cpu"]
+model_path = "models/yolov8n.onnx"
+confidence_threshold = 0.5
+batch_size = 1
+
+[output]
+display_enabled = true
+recording_enabled = false
+output_format = "mp4"
+
+[preprocessing]
+target_size = [640, 640]
+letterbox = true
+normalize = true

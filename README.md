@@ -4,19 +4,34 @@
 
 **Table of Contents**
 
-- [About](#about)
-- [Usage](#usage)
-- [Memory Footprint](#memory)
-- [Cross-compiling](#cross)
-- [License](#license)
+<!-- mtoc-start -->
 
-# About
+* [About](#about)
+  * [_Why?_](#why)
+  * [_What?_](#what)
+* [UPDATE 2025: Now Attempting to use GStreamer](#update-2025-now-attempting-to-use-gstreamer)
+  * [General Video and Image Processing](#general-video-and-image-processing)
+  * [Alternative Projects](#alternative-projects)
+* [Usage](#usage)
+* [**`pup` (Main Binary)**](#pup-main-binary)
+* [**`demo` (Demo Binary)**](#demo-demo-binary)
+  * [Available Demo Modes:](#available-demo-modes)
+  * [Key Differences:](#key-differences)
+* [Memory Footprint](#memory-footprint)
+  * [`cargo-bloat` & `cargo-size`](#cargo-bloat--cargo-size)
+* [Runtime](#runtime)
+* [Cross-compiling (wip) 🚧](#cross-compiling-wip-)
+* [Refs](#refs)
+* [License](#license)
+
+<!-- mtoc-end -->
+
+## About
 
 `pup` is a small proof-of-concept codebase for running ML models on video data
 using rust.
 
-The main libraries are `opencv` for video processing and `candle` as the deep
-learning framework.
+The main libraries are `opencv` for video processing and `ONNX Runtime` via the `ort` crate as the deep learning framework.
 
 ### _Why?_
 
@@ -38,23 +53,116 @@ rust has several advantages in this context:
 
 ### _What?_
 
-What's going on here then? This repo -- at the time of press -- uses the
-[Yolo-V8](https://github.com/huggingface/candle/tree/main/candle-examples/examples/yolo-v8)
-model defined in candle and applies it to video frames. The model itself could
+What's going on here then? This repo uses YOLOv8 ONNX models for object detection
+and applies inference to video frames using ONNX Runtime. The model itself could
 of course be switched out for any other object detection architecture, this was
-only chosen as a first attempt at combining `opencv` with `candle`.
+chosen as a robust approach combining `opencv` with `ONNX Runtime` for high-performance inference.
+
+## UPDATE 2025: Now Attempting to use GStreamer
+
+- [GStreamer Tutorias](https://gstreamer.freedesktop.org/documentation/tutorials/?gi-language=c)
+  - Rust files: https://gitlab.freedesktop.org/gstreamer/gstreamer-rs/-/tree/main/tutorials/src/bin
+- [Rust library for fast image resizing with using of SIMD instructions](https://github.com/cykooz/fast_image_resize)
+- [Live Coding: Rust and GStreamer (building an RTMP switcher)](https://www.youtube.com/watch?v=mwuCMDSZdiQ&list=PLzgEG9tLG-1SJ-5ntU3SSir3G-iHw7Fsu&index=1&ab_channel=ErikDotDev)
+- [Build live stream server with gstreamer rust + ngnix rtmp part-1](https://www.youtube.com/watch?v=4lIpDEamnY4&list=PLa2dCM6b-1M4NYLjg2kl72lEDZqLMasaE&index=1&ab_channel=JasonShen)
+- [Building a Video Processing Server with Rust](https://www.youtube.com/watch?v=lMionnDLC_Y&ab_channel=ThinkBeforeYouCode)
+- [Multimedia using Rust and GStreamer](https://www.youtube.com/watch?v=_6J3gvK7N9Y&ab_channel=RustTechXSummit)
+- [WTF is GStreamer?](https://www.youtube.com/watch?v=6eU8W0E_evo&ab_channel=THEOCon)
+
+### General Video and Image Processing
+
+- [A hands-on introduction to video technology: image, video, codec](https://github.com/leandromoreira/digital_video_introduction?tab=readme-ov-file#how-to-use-jupyter)
+- [Video Streaming Onboarding](https://github.com/Eyevinn/streaming-onboarding)
+- [How video works](https://howvideo.works/)
+- [Visualize streams of multimodal data. Free, fast, easy to use, and simple to integrate. Built in Rust.](https://github.com/rerun-io/rerun)
+
+### Alternative Projects
+
+- Attempting similar thing, i.e. Rusty Video for Object detection pipelines: https://github.com/slckl/gstreamed_rust_inference
+- [Teleconference system written in rust](https://github.com/security-union/videocall-rs)
+
+---
 
 ## Usage
 
-To run the simple example, run:
+There are two main binaries available with different purposes:
+
+## **`pup` (Main Binary)**
+**Professional GStreamer-based video processing system**
+
+- **Architecture**: Clean, modular design using proper abstractions
+- **Pipeline**: Full GStreamer VideoPipeline with FrameProcessor architecture
+- **Configuration**: TOML config file support + command-line arguments
+- **Purpose**: Production-ready real-time object detection system
+- **Target Users**: Production/Integration environments
 
 ```bash
-cargo run --release -- --video assets/sample.mp4
+# Process video file
+cargo run --release --bin pup -- --model models/yolov8n.onnx --video assets/sample.mp4
+
+# Process webcam input
+cargo run --release --bin pup -- --model models/yolov8n.onnx --video webcam
+
+# With configuration file
+cargo run --release --bin pup -- --config config.toml
 ```
 
-> ❕ This assumes rust is install on the host system. If not one can run: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+## **`demo` (Demo Binary)**
 
-<!-- _Note, the first time this is run it will need to download the model weights from huggingface_ -->
+Run YOLO object detection on your webcam with real-time overlays:
+
+```bash
+cargo run --release --bin demo -- --mode live --input webcam
+```
+
+<img src="assets/live-demo.png" alt="Live Demo" width="500">
+
+**Feature-rich demonstration and development tool**
+
+- **Architecture**: Self-contained demo with multiple specialised modes
+- **Pipeline**: Custom GStreamer pipelines built per mode
+- **Configuration**: Command-line only with sensible defaults
+- **Purpose**: Showcase capabilities, development testing, and experimentation
+- **Target Users**: Development/Demo purposes
+
+
+### Available Demo Modes:
+
+```bash
+# Live video with real-time YOLO bounding box overlays (recommended)
+cargo run --release --bin demo -- --mode live --input webcam
+cargo run --release --bin demo -- --mode live --input assets/sample.mp4
+
+# Terminal-only detection with file logging
+cargo run --release --bin demo -- --mode detection --input assets/sample.mp4
+
+# Video processing with terminal output (no display window)
+cargo run --release --bin demo -- --mode visual --input assets/sample.mp4
+
+# Basic video playback without inference
+cargo run --release --bin demo -- --mode playback --input webcam
+
+# Save processed video (under development)
+cargo run --release --bin demo -- --mode file-output --output processed.mp4
+```
+
+### Key Differences:
+
+| Aspect | `pup` (Main) | `demo` (Demo) |
+|--------|-------------|---------------|
+| **Target Users** | Production/Integration | Development/Demo |
+| **Complexity** | Clean, modular | Feature-rich, experimental |
+| **Visual Output** | Text-based | **Real-time video overlays** |
+| **Configuration** | TOML + CLI | CLI only |
+| **Video Display** | Minimal | Multiple modes including live overlays |
+| **Font Rendering** | None | Built-in bitmap fonts |
+| **Use Cases** | Integration, automation | Demos, development, testing |
+
+The **`demo` binary is more visually impressive** - especially `--mode live` which shows real-time bounding boxes drawn directly on video. The **`pup` binary is more suitable for production use** with its clean architecture and configuration management.
+
+> ❕ This assumes rust is installed on the host system. If not one can run: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+
+> ⚠️ **Model Required**: You need a YOLOv8 ONNX model file. Download `yolov8n.onnx` and place it in the `models/` directory.
 
 This will fire up a window like below and annotate objects in each frame:
 
@@ -109,6 +217,7 @@ If we use those tips and tricks such as:
 + panic = "abort"     # Abort on panic
 + strip = true        # Automatically strip symbols from the binary.
 ```
+
 we can get this down further to ~ 3Mb.
 
 ```bash
@@ -149,6 +258,7 @@ __common                   4   4297741224
 Total                2746960
 
 ```
+
 With the above numbers in bytes, i.e. 2746960 bytes ~ 2.8Mb.
 
 ```bash
@@ -167,6 +277,7 @@ $ cargo +nightly bloat --release -n 10
 33.4%  92.8%   1.4MiB              And 11025 smaller methods. Use -n N to show more.
 36.0% 100.0%   1.5MiB              .text section size, the file size is 4.2MiB
 ```
+
 **Note**, the above does not include all the optimizations listed previously so
 it is re-compiled and the `.text` section size is of the order `4Mb`. But it
 gives us a good indication as to where the bulk of the code is being used up.
@@ -253,15 +364,18 @@ This gives an average memory usage of ~100Mb and total peak memory usage of
 ~690Mb.
 
 _Chatgpt summary of Peak Physical vs. Physical:_
+
 > The terms "physical memory footprint" and "peak physical memory footprint" both
 > relate to the amount of physical memory (RAM) used by a process or application, but they capture different aspects of memory usage:
 >
 > 1. **Physical Memory Footprint:**
->   - The physical memory footprint generally refers to the amount of RAM that a process or application is actively using at a specific point in time or on average during its execution.  - It represents the current or average memory consumption and is not necessarily the maximum amount of memory used throughout the entire runtime of the process.
+>
+> - The physical memory footprint generally refers to the amount of RAM that a process or application is actively using at a specific point in time or on average during its execution. - It represents the current or average memory consumption and is not necessarily the maximum amount of memory used throughout the entire runtime of the process.
 >
 > 2. **Peak Physical Memory Footprint:**
->  - The peak physical memory footprint specifically refers to the maximum amount of RAM that a process or application has used during its entire execution.  - It represents the highest point of memory consumption reached by the process or application.
-> In summary, the physical memory footprint gives you an idea of the current or average memory usage, while the peak physical memory footprint highlights the maximum memory usage observed over the entire lifetime of the process or application. Monitoring both metrics is important for understanding how an application utilizes memory resources and for optimizing performance and resource management.
+>
+> - The peak physical memory footprint specifically refers to the maximum amount of RAM that a process or application has used during its entire execution. - It represents the highest point of memory consumption reached by the process or application.
+>   In summary, the physical memory footprint gives you an idea of the current or average memory usage, while the peak physical memory footprint highlights the maximum memory usage observed over the entire lifetime of the process or application. Monitoring both metrics is important for understanding how an application utilizes memory resources and for optimizing performance and resource management.
 
 As an aside, here is a snippet of the python example (note, they are not the
 same program and this is only show as an illustration)
@@ -318,6 +432,7 @@ docker based tools such as https://github.com/cross-rs/cross or
 https://github.com/rust-cross/rust-musl-cross
 
 `opencv` cross compilation complications 👇
+
 - https://github.com/twistedfall/opencv-rust/blob/master/INSTALL.md#crosscompilation
 
 ## Refs
@@ -335,3 +450,8 @@ https://github.com/rust-cross/rust-musl-cross
 ## License
 
 `pup` is distributed under the terms of the [MIT](https://spdx.org/licenses/MIT.html) license.
+
+let input_shape = input_tensor.shape().to_vec();
+let input_data = input_tensor.iter().cloned().collect::<Vec<f32>>();
+
+let inputs = ort::inputs!("input" => (input_shape, input_data)).ok()?;
