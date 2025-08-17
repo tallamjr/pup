@@ -1,7 +1,7 @@
 [package]
 edition = "2021"
 name = "pup"
-version = "0.2.5"
+version = "0.3.0"
 description = "Real-time multi-task computer vision with GStreamer and ONNX Runtime"
 authors = ["Tarek Allam Jr <t.allam.jr@gmail.com>"]
 license = "MIT"

@@ -1,6 +1,14 @@
 name: "Setup Dependencies"
-description: "Install system dependencies (OpenCV, GStreamer, pkg-config) for pup project"
+description: "Install system dependencies (OpenCV, GStreamer, pkg-config) and Python setup for pup project"
 inputs:
+  python-version:
+    description: "Python version to install"
+    required: false
+    default: "3.11"
+  enable-python:
+    description: "Setup Python environment with UV"
+    required: false
+    default: "false"
   os:
     description: "Operating system"
     required: true
@@ -49,3 +57,16 @@ runs:
         # Set environment variables for linking
         echo "PKG_CONFIG_PATH=$(brew --prefix)/lib/pkgconfig:${PKG_CONFIG_PATH}" >> $GITHUB_ENV
         echo "DYLD_FALLBACK_LIBRARY_PATH=$(xcode-select --print-path)/usr/lib/" >> $GITHUB_ENV
+
+    - name: Install UV
+      if: inputs.enable-python == 'true'
+      uses: astral-sh/setup-uv@v5
+
+    - name: Setup Python with UV
+      if: inputs.enable-python == 'true'
+      shell: bash
+      run: |
+        uv venv --python "${{ inputs.python-version }}"
+        source .venv/bin/activate
+        echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
+        echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
