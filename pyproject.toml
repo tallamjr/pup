@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
 
 [project]
 name = "pup"
@@ -31,54 +31,11 @@ Documentation = "https://github.com/unknown/pup#readme"
 Issues = "https://github.com/unknown/pup/issues"
 Source = "https://github.com/unknown/pup"
 
-[tool.hatch.version]
-path = "src/python/__about__.py"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/python"]
-
-[tool.hatch.envs.default]
-dependencies = [
-  "coverage[toml]>=6.5",
-  "pytest",
-]
-[tool.hatch.envs.default.scripts]
-test = "pytest {args:tests}"
-test-cov = "coverage run -m pytest {args:tests}"
-cov-report = [
-  "- coverage combine",
-  "coverage report",
-]
-cov = [
-  "test-cov",
-  "cov-report",
-]
-
-[[tool.hatch.envs.all.matrix]]
-python = ["3.7", "3.8", "3.9", "3.10", "3.11"]
-
-[tool.hatch.envs.lint]
-detached = true
-dependencies = [
-  "black>=23.1.0",
-  "mypy>=1.0.0",
-  "ruff>=0.0.243",
-]
-[tool.hatch.envs.lint.scripts]
-typing = "mypy --install-types --non-interactive {args:src/python tests}"
-style = [
-  "ruff {args:.}",
-  "black --check --diff {args:.}",
-]
-fmt = [
-  "black {args:.}",
-  "ruff --fix {args:.}",
-  "style",
-]
-all = [
-  "style",
-  "typing",
-]
+[tool.maturin]
+python-source = "python"
+module-name = "pup._pup"
+bindings = "pyo3"
+features = ["python"]
 
 [tool.black]
 target-version = ["py37"]
@@ -151,11 +108,11 @@ source_pkgs = ["pup", "tests"]
 branch = true
 parallel = true
 omit = [
-  "src/python/__about__.py",
+  "python/pup/__about__.py",
 ]
 
 [tool.coverage.paths]
-pup = ["src/python", "*/pup/src/python"]
+pup = ["python/pup", "*/pup/python/pup"]
 tests = ["tests", "*/pup/tests"]
 
 [tool.coverage.report]

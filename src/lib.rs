@@ -33,3 +33,20 @@ pub use common::run;
 
 /// Current version of the library
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Python bindings module
+#[cfg(feature = "python")]
+pub mod python;
+
+// Python module definition for PyO3
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
+
+#[cfg(feature = "python")]
+#[pymodule]
+fn _pup(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add("__version__", VERSION)?;
+    m.add_function(wrap_pyfunction!(python::benchmark_inference, m)?)?;
+    m.add_class::<python::PyOrtBackend>()?;
+    Ok(())
+}

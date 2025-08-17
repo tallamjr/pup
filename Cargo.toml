@@ -8,8 +8,12 @@ license = "MIT"
 repository = "https://github.com/tallamjr/pup"
 default-run = "pup"
 
+[features]
+default = []
+python = ["pyo3"]
+
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy", "python"))'] }
 
 [target.'cfg(target_vendor= "apple")'.dependencies]
 
@@ -36,6 +40,7 @@ opencv = "0.94.2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "time"] }
 serde_json = "1.0"
+pyo3 = { version = "0.22", features = ["extension-module"], optional = true }
 
 [dev-dependencies]
 tempfile = "3.8"
@@ -45,7 +50,7 @@ tokio = { version = "1.0", features = ["macros", "rt"] }
 [build-dependencies]
 cc = "1.0"
 
-# GStreamer plugin configuration
+# Hybrid configuration: GStreamer plugin + Python extension
 [lib]
 name = "gstpup"
 crate-type = ["cdylib", "rlib"]
