@@ -44,4 +44,3 @@ cargo run --example yolo-v8 --release -- \
 - `--task`: `detect` for object detection and `pose` for pose estimation.
 - `--legend-size`: the size of the characters to print.
 - `--model`: use a local model file rather than downloading it from the hub.
-

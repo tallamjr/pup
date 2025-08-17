@@ -9,7 +9,6 @@ use std::time::{Duration, Instant};
 /// Memory usage benchmarks
 #[cfg(test)]
 mod memory_benchmarks {
-    use super::*;
 
     #[test]
     fn test_baseline_memory_usage() {

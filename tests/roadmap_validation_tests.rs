@@ -3,7 +3,10 @@
 //! These tests verify that each phase of the roadmap implementation
 //! meets the specified requirements and success metrics.
 
-use gstpup::{AppConfig, InferenceConfig, InputConfig, ModeConfig, OutputConfig, PreprocessingConfig, Metrics, PerformanceMonitor, ConsoleReporter, JsonReporter, PupError};
+use gstpup::{
+    AppConfig, ConsoleReporter, JsonReporter, Metrics, MetricsReporter, PerformanceMonitor,
+    PupError,
+};
 
 use std::path::PathBuf;
 
@@ -73,12 +76,14 @@ normalize = true
     #[test]
     fn test_trait_based_inference_system() {
         // Mock traits that should be implemented in Phase 1
+        #[allow(dead_code)]
         trait InferenceBackend {
             type Error;
             fn load_model(&mut self, path: &std::path::Path) -> Result<(), Self::Error>;
             fn get_input_shape(&self) -> &[usize];
         }
 
+        #[allow(dead_code)]
         trait ModelPostProcessor {
             fn process_raw_output(&self, output: Vec<f32>) -> Vec<Detection>;
         }
@@ -353,7 +358,7 @@ outputs:
     }
 }
 
-/// Phase 4: Performance Optimization Tests  
+/// Phase 4: Performance Optimization Tests
 /// Verifies zero-copy buffers and hardware acceleration
 #[cfg(test)]
 mod phase4_performance {
@@ -844,7 +849,7 @@ mod success_metrics {
     }
 }
 
-/// Phase 2: Production Readiness Tests  
+/// Phase 2: Production Readiness Tests
 /// Verifies enhanced configuration, error handling, and performance monitoring
 #[cfg(test)]
 mod phase2_production_readiness {
@@ -854,28 +859,28 @@ mod phase2_production_readiness {
     #[test]
     fn test_comprehensive_error_handling() {
         // Test that all major error categories from Phase 2 are implemented
-        
+
         // Input source errors
         let error = PupError::InputNotAvailable("webcam".to_string());
         assert_eq!(error.to_string(), "Input source not available: webcam");
-        
+
         let error = PupError::WebcamNotFound { device_id: 0 };
         assert!(error.to_string().contains("device 0"));
-        
+
         // CoreML and inference errors
         let error = PupError::CoreMLFailure("provider not available".to_string());
         assert!(error.to_string().contains("CoreML"));
-        
+
         let error = PupError::ModelLoadError(PathBuf::from("test.onnx"));
         assert!(error.to_string().contains("Model loading failed"));
-        
+
         // Performance errors
         let error = PupError::PerformanceTarget {
             target_fps: 30.0,
             actual_fps: 15.0,
         };
         assert!(error.to_string().contains("Performance target not met"));
-        
+
         // Configuration errors
         let error = PupError::InvalidConfigValue {
             field: "threshold".to_string(),
@@ -888,25 +893,25 @@ mod phase2_production_readiness {
     fn test_enhanced_configuration_system() {
         // Test production.toml structure from Phase 2
         let config = AppConfig::production_example();
-        
+
         // Verify mode-based operation
         assert_eq!(config.mode.mode_type, "production");
-        
+
         // Verify enhanced input source management
         assert_eq!(config.input.source, "webcam");
         assert_eq!(config.input.device_id, Some(0));
         assert!(config.input.caps.is_some());
-        
+
         // Verify CoreML-optimized configuration
         assert_eq!(config.inference.backend, "ort");
         assert_eq!(config.inference.execution_providers, vec!["coreml", "cpu"]);
         assert_eq!(config.inference.batch_size, 1);
-        
+
         // Verify output configuration
         assert!(config.output.display_enabled);
         assert!(!config.output.recording_enabled);
         assert_eq!(config.output.output_format, "mp4");
-        
+
         // Test validation
         assert!(config.validate().is_ok());
     }
@@ -915,7 +920,7 @@ mod phase2_production_readiness {
     fn test_performance_monitoring_infrastructure() {
         // Test comprehensive metrics from Phase 2
         let metrics = Metrics::new();
-        
+
         // Test all metric types
         metrics.update_fps(60.0);
         metrics.update_inference_latency(25.0);
@@ -924,7 +929,7 @@ mod phase2_production_readiness {
         metrics.update_gpu_usage(60.0);
         metrics.increment_total_frames();
         metrics.increment_dropped_frames();
-        
+
         // Verify metrics are tracked correctly
         assert_eq!(metrics.get_fps(), 60.0);
         assert_eq!(metrics.get_inference_latency_ms(), 25.0);
@@ -933,10 +938,10 @@ mod phase2_production_readiness {
         assert_eq!(metrics.get_gpu_usage_percent(), 60.0);
         assert_eq!(metrics.get_total_frames(), 1);
         assert_eq!(metrics.get_dropped_frames(), 1);
-        
+
         // Test performance target validation
         assert!(metrics.check_performance_targets(30.0, 50.0).is_ok());
-        
+
         // Test with poor performance
         metrics.update_fps(20.0);
         assert!(metrics.check_performance_targets(30.0, 50.0).is_err());
@@ -948,18 +953,18 @@ mod phase2_production_readiness {
         metrics.update_fps(45.0);
         metrics.update_inference_latency(20.0);
         metrics.update_memory_usage(128);
-        
+
         // Test console reporter
         let console_reporter = ConsoleReporter::new(0);
         assert!(console_reporter.report(&metrics).is_ok());
         assert_eq!(console_reporter.name(), "console");
-        
+
         // Test JSON reporter
         let temp_file = NamedTempFile::new().unwrap();
         let json_reporter = JsonReporter::new(temp_file.path().to_path_buf(), 0);
         assert!(json_reporter.report(&metrics).is_ok());
         assert_eq!(json_reporter.name(), "json");
-        
+
         // Verify JSON output
         let content = std::fs::read_to_string(temp_file.path()).unwrap();
         assert!(content.contains("\"fps\":45"));
@@ -969,27 +974,27 @@ mod phase2_production_readiness {
     #[test]
     fn test_configuration_validation_comprehensive() {
         let mut config = AppConfig::production_example();
-        
+
         // Test mode validation
         config.mode.mode_type = "invalid".to_string();
         assert!(config.validate().is_err());
         config.mode.mode_type = "production".to_string();
-        
+
         // Test execution provider validation
         config.inference.execution_providers = vec!["invalid".to_string()];
         assert!(config.validate().is_err());
         config.inference.execution_providers = vec!["coreml".to_string(), "cpu".to_string()];
-        
+
         // Test confidence threshold validation
         config.inference.confidence_threshold = 1.5;
         assert!(config.validate().is_err());
         config.inference.confidence_threshold = 0.5;
-        
+
         // Test output format validation
         config.output.output_format = "invalid".to_string();
         assert!(config.validate().is_err());
         config.output.output_format = "mp4".to_string();
-        
+
         // Should be valid now
         assert!(config.validate().is_ok());
     }
@@ -997,23 +1002,23 @@ mod phase2_production_readiness {
     #[test]
     fn test_performance_monitor_integration() {
         let mut monitor = PerformanceMonitor::new();
-        
+
         // Add reporters
         monitor.add_reporter(Box::new(ConsoleReporter::new(1000)));
-        
+
         // Get metrics reference
         let metrics = monitor.metrics();
-        
+
         // Update metrics
         metrics.update_fps(45.0);
         metrics.update_inference_latency(20.0);
-        
+
         // Test system metrics update
         assert!(monitor.update_system_metrics().is_ok());
-        
+
         // Test reporting
         assert!(monitor.report().is_ok());
-        
+
         // Test performance targets
         assert!(monitor.check_targets(30.0, 50.0).is_ok());
     }
@@ -1022,15 +1027,15 @@ mod phase2_production_readiness {
     fn test_backwards_compatibility() {
         // Test that legacy configurations still work
         let config = AppConfig::default();
-        
+
         // Should have pipeline available for backward compatibility
         assert!(config.pipeline.is_some());
-        
+
         // Test helper methods
         let pipeline = config.get_pipeline();
         assert_eq!(pipeline.video_source, config.input.source);
         assert_eq!(pipeline.display_enabled, config.output.display_enabled);
-        
+
         // Test video source getter
         assert_eq!(config.video_source(), config.input.source);
     }
@@ -1039,20 +1044,20 @@ mod phase2_production_readiness {
     fn test_roadmap_success_metrics() {
         // Test the success metrics from Phase 2 roadmap
         let metrics = Metrics::new();
-        
+
         // Performance Targets from roadmap:
         // ✓ Inference Latency: <50ms for YOLOv8n on CoreML
         metrics.update_inference_latency(25.0);
         assert!(metrics.get_inference_latency_ms() < 50.0);
-        
-        // ✓ Real-time Processing: >30 FPS on 720p video  
+
+        // ✓ Real-time Processing: >30 FPS on 720p video
         metrics.update_fps(45.0);
         assert!(metrics.get_fps() > 30.0);
-        
+
         // ✓ Memory Efficiency: <500MB RAM usage during operation
         metrics.update_memory_usage(256);
         assert!(metrics.get_memory_usage_mb() < 500);
-        
+
         // Test performance target validation meets roadmap requirements
         assert!(metrics.check_performance_targets(30.0, 50.0).is_ok());
     }

@@ -88,7 +88,7 @@ fn test_gstreamer_initialization() {
 
     let test_code = r#"
         use gstreamer::prelude::*;
-        
+
         fn main() -> Result<(), Box<dyn std::error::Error>> {
             gstreamer::init()?;
             println!("GStreamer initialized successfully");
@@ -188,7 +188,7 @@ fn test_video_processing_pipeline() {
 
     // Terminate the process
     let _ = child.kill();
-    let output = child.wait().expect("Failed to wait for child process");
+    let _output = child.wait().expect("Failed to wait for child process");
 
     // The process should have been running (killed, not failed)
     // Note: kill() results in a non-zero exit code, which is expected
@@ -212,7 +212,7 @@ fn test_performance_baseline() {
     let test_code = r#"
         use ort::session::{builder::GraphOptimizationLevel, Session};
         use ort::execution_providers::CoreMLExecutionProvider;
-        
+
         fn main() -> Result<(), Box<dyn std::error::Error>> {
             let _session = Session::builder()?
                 .with_optimization_level(GraphOptimizationLevel::Level3)?

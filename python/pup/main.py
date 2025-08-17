@@ -13,7 +13,7 @@ cap.set(4, 480)
 model = YOLO(f"{ROOTD}/src/models/yolov8n.pt")
 
 # object classes
-classNames = [
+class_names = [
     "person",
     "bicycle",
     "car",
@@ -114,24 +114,22 @@ while True:
             cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 255), 3)
 
             # confidence
-            confidence = math.ceil((box.conf[0] * 100)) / 100
-            print("Confidence --->", confidence)
+            confidence = math.ceil(box.conf[0] * 100) / 100
 
             # class name
             cls = int(box.cls[0])
-            print("Class name -->", classNames[cls])
 
             # object details
             org = [x1, y1]
             font = cv2.FONT_HERSHEY_SIMPLEX
-            fontScale = 1
+            font_scale = 1
             color = (255, 0, 0)
             thickness = 2
 
-            cv2.putText(img, classNames[cls], org, font, fontScale, color, thickness)
+            cv2.putText(img, class_names[cls], org, font, font_scale, color, thickness)
 
-    cv2.imshow('Webcam', img)
-    if cv2.waitKey(1) == ord('q'):
+    cv2.imshow("Webcam", img)
+    if cv2.waitKey(1) == ord("q"):
         break
 
 cap.release()

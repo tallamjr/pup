@@ -1,82 +1,65 @@
-name: build and release
+name: Rust
 
 on:
   push:
-    branches: [ "issues/1/m2build" ]
+    branches: [main, master]
+    paths:
+      - "**.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "build.rs"
+      - ".github/workflows/rust.yml"
+      - ".github/actions/**"
   pull_request:
-    branches: [ "master" ]
-
-permissions:
-  contents: write
+    paths:
+      - "**.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "build.rs"
+      - ".github/workflows/rust.yml"
+      - ".github/actions/**"
+  workflow_dispatch:
 
 jobs:
-  build:
-    name: ${{ matrix.platform.os_name }} with rust ${{ matrix.toolchain }}
-    runs-on: ${{ matrix.platform.os }}
+  rust-check:
+    name: Rust Check
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          # - os_name: Linux-aarch64
-          #   os: ubuntu-20.04
-          #   target: aarch64-unknown-linux-musl
-          #   bin: pup-linux-arm64
-          # - os_name: Linux-x86_64
-          #   os: ubuntu-20.04
-          #   target: x86_64-unknown-linux-gnu
-          #   bin: pup-linux-amd64
-          # - os_name: Windows-x86_64
-          #   os: windows-latest
-          #   target: x86_64-pc-windows-msvc
-          #   bin: pup-amd64.exe
-          # - os_name: macOS-x86_64
-          #   os: macOS-latest
-          #   target: x86_64-apple-darwin
-          #   bin: pup-darwin-amd64
-          - os_name: macOS-aarch64
-            os: macOS-13
-            target: aarch64-apple-darwin
-            bin: pup-darwin-arm64
-        toolchain:
-          - stable
+        os: [ubuntu-latest, macos-latest]
+
     steps:
-      - uses: actions/checkout@v3
-      # Install opencv on macOS
-      - name: Update Homebrew
-        run: |
-          brew update --preinstall
-          brew bundle --file .config/brew/Brewfile || true
-        if: matrix.platform.os_name == 'macOS-aarch64'
-      - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
-          xcode-version: '14.3.1'
-      - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2
+          components: rustfmt, clippy
+
+      - name: Setup dependencies
+        uses: ./.github/actions/setup-dependencies
         with:
-          version: "10.0"
-      - name: OpenCV Troubleshooting
-        run: |
-          export DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/usr/lib/"
-      - name: Build binaries
-        uses: houseabsolute/actions-rust-cross@v0
+          os: ${{ matrix.os }}
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
         with:
-          command: "build"
-          target: ${{ matrix.platform.target }}
-          toolchain: ${{ matrix.toolchain }}
-          args: "--release"
-          strip: true
-      - name: Rename binary (linux and macos)
-        run: mv target/${{ matrix.platform.target }}/release/pup target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}
-        if: matrix.platform.os_name != 'Windows-x86_64'
-      - name: Rename binary (windows)
-        run: mv target/${{ matrix.platform.target }}/release/pup.exe target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}
-        if: matrix.platform.os_name == 'Windows-x86_64'
-      - name: Generate SHA-256
-        run: shasum -a 256 target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }} | cut -d ' ' -f 1 > target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}.sha256
-      - name: Release binary and SHA-256 checksum to GitHub
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}
-            target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}.sha256
+          key: ${{ matrix.os }}
+          cache-targets: true
+          cache-all-crates: true
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --bins --lib -- -D warnings
+
+      - name: Cargo check
+        run: cargo check --all
+
+      - name: Cargo build
+        run: cargo build --release
+
+      - name: Run tests
+        run: cargo test

@@ -16,10 +16,15 @@ pub mod utils;
 pub mod gst_plugins;
 
 // Re-export commonly used types
-pub use config::{AppConfig, InferenceConfig, InputConfig, ModeConfig, OutputConfig, PipelineConfig, PreprocessingConfig};
+pub use config::{
+    AppConfig, InferenceConfig, InputConfig, ModeConfig, OutputConfig, PipelineConfig,
+    PreprocessingConfig,
+};
 pub use error::{PupError, PupResult};
-pub use inference::{InferenceBackend, InferenceError, OrtBackend, TaskType, TaskOutput};
-pub use metrics::{Metrics, MetricsReporter, PerformanceMonitor, ConsoleReporter, JsonReporter, FrameTimer};
+pub use inference::{InferenceBackend, InferenceError, OrtBackend, TaskOutput, TaskType};
+pub use metrics::{
+    ConsoleReporter, FrameTimer, JsonReporter, Metrics, MetricsReporter, PerformanceMonitor,
+};
 pub use preprocessing::Preprocessor;
 pub use utils::{Detection, DetectionError};
 
@@ -29,5 +34,19 @@ pub use common::run;
 /// Current version of the library
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Library result type (deprecated - use PupResult instead)
-pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+/// Python bindings module
+#[cfg(feature = "python")]
+pub mod python;
+
+// Python module definition for PyO3
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
+
+#[cfg(feature = "python")]
+#[pymodule]
+fn _pup(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add("__version__", VERSION)?;
+    m.add_function(wrap_pyfunction!(python::benchmark_inference, m)?)?;
+    m.add_class::<python::PyOrtBackend>()?;
+    Ok(())
+}

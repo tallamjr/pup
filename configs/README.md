@@ -9,7 +9,7 @@ This directory contains pre-configured TOML files for different use cases of the
 - **Features**: Live video window, real-time object detection, overlay rendering
 - **Usage**: `cargo run --release -- --config configs/webcam_live.toml`
 
-### 2. **Sample Video Live View** (`sample_video_live.toml`) 
+### 2. **Sample Video Live View** (`sample_video_live.toml`)
 - **Purpose**: Process sample video file with live overlays
 - **Features**: Video playback with bounding box overlays and labels
 - **Usage**: `cargo run --release -- --config configs/sample_video_live.toml`
@@ -88,7 +88,7 @@ If you get the error `dyld[xxx]: missing symbol called` followed by `Abort trap:
    ```bash
    # Test with sample video
    ./run_with_overlays.sh sample
-   
+
    # Test with webcam
    ./run_with_overlays.sh webcam
    ```
@@ -96,7 +96,7 @@ If you get the error `dyld[xxx]: missing symbol called` followed by `Abort trap:
 ### **Other Common Issues**
 
 - **No video window**: Check that `display_enabled = true` in the config
-- **No overlays**: Ensure mode is set to `"live"` 
+- **No overlays**: Ensure mode is set to `"live"`
 - **No detections**: Lower the `confidence_threshold` value
 - **Webcam not working**: Check `device_id` or try `video = "webcam"` in command line
 - **Model not found**: Ensure `models/yolov8n.onnx` exists in your project directory

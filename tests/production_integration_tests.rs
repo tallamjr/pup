@@ -4,13 +4,10 @@
 //! including error handling, configuration validation, and performance monitoring.
 
 use gstpup::{
-    PupError, PupResult, 
-    Metrics, PerformanceMonitor, ConsoleReporter, JsonReporter, MetricsReporter,
-    AppConfig, InferenceConfig, InputConfig, ModeConfig, OutputConfig, PreprocessingConfig
+    AppConfig, ConsoleReporter, JsonReporter, Metrics, MetricsReporter, PerformanceMonitor,
+    PupError,
 };
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Duration;
 use tempfile::NamedTempFile;
 
 #[cfg(test)]
@@ -57,7 +54,7 @@ mod error_handling_tests {
     fn test_error_conversion_from_io() {
         let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "test file");
         let pup_error: PupError = io_error.into();
-        
+
         match pup_error {
             PupError::Unexpected(message) => {
                 assert!(message.contains("File not found"));
@@ -74,7 +71,7 @@ mod metrics_integration_tests {
     #[test]
     fn test_metrics_basic_operations() {
         let metrics = Metrics::new();
-        
+
         // Test initial state
         assert_eq!(metrics.get_fps(), 0.0);
         assert_eq!(metrics.get_memory_usage_mb(), 0);
@@ -100,13 +97,13 @@ mod metrics_integration_tests {
     #[test]
     fn test_metrics_peak_memory_tracking() {
         let metrics = Metrics::new();
-        
+
         metrics.update_memory_usage(100);
         assert_eq!(metrics.get_peak_memory_mb(), 100);
-        
+
         metrics.update_memory_usage(200);
         assert_eq!(metrics.get_peak_memory_mb(), 200);
-        
+
         // Peak should not decrease
         metrics.update_memory_usage(150);
         assert_eq!(metrics.get_memory_usage_mb(), 150);
@@ -116,20 +113,20 @@ mod metrics_integration_tests {
     #[test]
     fn test_metrics_frame_drop_rate_calculation() {
         let metrics = Metrics::new();
-        
+
         // No frames processed yet
         assert_eq!(metrics.get_frame_drop_rate(), 0.0);
-        
+
         // Process some frames
         for _ in 0..10 {
             metrics.increment_total_frames();
         }
-        
+
         // Drop some frames
         for _ in 0..3 {
             metrics.increment_dropped_frames();
         }
-        
+
         // 3 dropped out of 10 total = 30%
         let drop_rate = metrics.get_frame_drop_rate();
         assert!((drop_rate - 30.0).abs() < 0.001);
@@ -138,18 +135,18 @@ mod metrics_integration_tests {
     #[test]
     fn test_metrics_performance_targets() {
         let metrics = Metrics::new();
-        
+
         // Set good performance
         metrics.update_fps(60.0);
         metrics.update_inference_latency(10.0);
-        
+
         // Should pass targets
         assert!(metrics.check_performance_targets(30.0, 50.0).is_ok());
-        
+
         // Should fail FPS target
         metrics.update_fps(20.0);
         assert!(metrics.check_performance_targets(30.0, 50.0).is_err());
-        
+
         // Should fail latency target
         metrics.update_fps(60.0);
         metrics.update_inference_latency(100.0);
@@ -159,7 +156,7 @@ mod metrics_integration_tests {
     #[test]
     fn test_metrics_reset_functionality() {
         let metrics = Metrics::new();
-        
+
         // Set various metrics
         metrics.update_fps(30.0);
         metrics.update_inference_latency(50.0);
@@ -167,15 +164,15 @@ mod metrics_integration_tests {
         metrics.increment_total_frames();
         metrics.increment_dropped_frames();
         metrics.update_cpu_usage(75.0);
-        
+
         // Verify they're set
         assert_eq!(metrics.get_fps(), 30.0);
         assert_eq!(metrics.get_memory_usage_mb(), 256);
         assert_eq!(metrics.get_total_frames(), 1);
-        
+
         // Reset
         metrics.reset();
-        
+
         // Verify everything is reset
         assert_eq!(metrics.get_fps(), 0.0);
         assert_eq!(metrics.get_inference_latency_ms(), 0.0);
@@ -189,23 +186,23 @@ mod metrics_integration_tests {
     #[test]
     fn test_performance_monitor_integration() {
         let mut monitor = PerformanceMonitor::new();
-        
+
         // Add reporters
         monitor.add_reporter(Box::new(ConsoleReporter::new(1000)));
-        
+
         // Get metrics reference
         let metrics = monitor.metrics();
-        
+
         // Update some metrics
         metrics.update_fps(45.0);
         metrics.update_inference_latency(20.0);
-        
+
         // Test system metrics update
         assert!(monitor.update_system_metrics().is_ok());
-        
+
         // Test reporting
         assert!(monitor.report().is_ok());
-        
+
         // Test performance target checking
         assert!(monitor.check_targets(30.0, 50.0).is_ok());
         assert!(monitor.check_targets(50.0, 15.0).is_err());
@@ -219,11 +216,11 @@ mod metrics_integration_tests {
         metrics.update_memory_usage(128);
         metrics.update_cpu_usage(45.0);
         metrics.update_gpu_usage(60.0);
-        
+
         let reporter = ConsoleReporter::new(0); // No interval limit for testing
         assert!(reporter.report(&metrics).is_ok());
         assert_eq!(reporter.name(), "console");
-        
+
         // Test summary format
         let summary = metrics.format_summary();
         assert!(summary.contains("FPS: 30.5"));
@@ -237,17 +234,17 @@ mod metrics_integration_tests {
     fn test_json_reporter() {
         let temp_file = NamedTempFile::new().unwrap();
         let temp_path = temp_file.path().to_path_buf();
-        
+
         let metrics = Metrics::new();
         metrics.update_fps(30.0);
         metrics.update_inference_latency(25.0);
         metrics.update_memory_usage(128);
         metrics.increment_total_frames();
-        
+
         let reporter = JsonReporter::new(temp_path.clone(), 0); // No interval limit
         assert!(reporter.report(&metrics).is_ok());
         assert_eq!(reporter.name(), "json");
-        
+
         // Verify file was written
         let content = std::fs::read_to_string(&temp_path).unwrap();
         assert!(content.contains("\"fps\":30"));
@@ -264,7 +261,7 @@ mod configuration_validation_tests {
     #[test]
     fn test_production_config_creation() {
         let config = AppConfig::production_example();
-        
+
         assert_eq!(config.mode.mode_type, "production");
         assert_eq!(config.input.source, "webcam");
         assert_eq!(config.inference.backend, "ort");
@@ -276,20 +273,20 @@ mod configuration_validation_tests {
     #[test]
     fn test_config_validation_mode() {
         let mut config = AppConfig::default();
-        
+
         // Valid modes should pass
         config.mode.mode_type = "production".to_string();
         assert!(config.validate().is_ok());
-        
+
         config.mode.mode_type = "live".to_string();
         assert!(config.validate().is_ok());
-        
+
         config.mode.mode_type = "detection".to_string();
         assert!(config.validate().is_ok());
-        
+
         config.mode.mode_type = "benchmark".to_string();
         assert!(config.validate().is_ok());
-        
+
         // Invalid mode should fail
         config.mode.mode_type = "invalid".to_string();
         assert!(config.validate().is_err());
@@ -298,25 +295,25 @@ mod configuration_validation_tests {
     #[test]
     fn test_config_validation_inference() {
         let mut config = AppConfig::production_example();
-        
+
         // Valid configuration should pass
         assert!(config.validate().is_ok());
-        
+
         // Invalid backend
         config.inference.backend = "invalid".to_string();
         assert!(config.validate().is_err());
         config.inference.backend = "ort".to_string();
-        
+
         // Invalid execution provider
         config.inference.execution_providers = vec!["invalid".to_string()];
         assert!(config.validate().is_err());
         config.inference.execution_providers = vec!["coreml".to_string(), "cpu".to_string()];
-        
+
         // Invalid confidence threshold
         config.inference.confidence_threshold = 1.5;
         assert!(config.validate().is_err());
         config.inference.confidence_threshold = 0.5;
-        
+
         // Invalid batch size
         config.inference.batch_size = 0;
         assert!(config.validate().is_err());
@@ -328,30 +325,30 @@ mod configuration_validation_tests {
     #[test]
     fn test_config_validation_input() {
         let mut config = AppConfig::production_example();
-        
+
         // Valid webcam input
         config.input.source = "webcam".to_string();
         config.input.device_id = Some(0);
         assert!(config.validate().is_ok());
-        
+
         // Invalid device ID
         config.input.device_id = Some(999);
         assert!(config.validate().is_err());
         config.input.device_id = Some(0);
-        
+
         // Valid RTSP URL
         config.input.source = "rtsp://example.com/stream".to_string();
         assert!(config.validate().is_ok());
-        
+
         // Invalid RTSP URL format
         config.input.source = "invalid-rtsp".to_string();
         assert!(config.validate().is_err());
-        
+
         // Valid caps format
         config.input.source = "webcam".to_string();
         config.input.caps = Some("video/x-raw,width=640,height=480".to_string());
         assert!(config.validate().is_ok());
-        
+
         // Invalid caps format
         config.input.caps = Some("invalid-caps".to_string());
         assert!(config.validate().is_err());
@@ -360,14 +357,14 @@ mod configuration_validation_tests {
     #[test]
     fn test_config_validation_output() {
         let mut config = AppConfig::production_example();
-        
+
         // Valid output formats
         let valid_formats = ["mp4", "json", "rtmp", "avi", "mov"];
         for format in &valid_formats {
             config.output.output_format = format.to_string();
             assert!(config.validate().is_ok());
         }
-        
+
         // Invalid output format
         config.output.output_format = "invalid".to_string();
         assert!(config.validate().is_err());
@@ -376,40 +373,46 @@ mod configuration_validation_tests {
     #[test]
     fn test_config_validation_preprocessing() {
         let mut config = AppConfig::production_example();
-        
+
         // Valid preprocessing config
         assert!(config.validate().is_ok());
-        
+
         // Invalid target size (zero dimension)
         if let Some(ref mut preprocessing) = config.preprocessing {
             preprocessing.target_size = [0, 640];
-            assert!(config.validate().is_err());
-            
-            preprocessing.target_size = [640, 0];
-            assert!(config.validate().is_err());
-            
-            // Too large dimensions
-            preprocessing.target_size = [5000, 5000];
-            assert!(config.validate().is_err());
-            
-            // Valid size
-            preprocessing.target_size = [640, 640];
-            assert!(config.validate().is_ok());
         }
+        assert!(config.validate().is_err());
+
+        if let Some(ref mut preprocessing) = config.preprocessing {
+            preprocessing.target_size = [640, 0];
+        }
+        assert!(config.validate().is_err());
+
+        // Too large dimensions
+        if let Some(ref mut preprocessing) = config.preprocessing {
+            preprocessing.target_size = [5000, 5000];
+        }
+        assert!(config.validate().is_err());
+
+        // Valid size
+        if let Some(ref mut preprocessing) = config.preprocessing {
+            preprocessing.target_size = [640, 640];
+        }
+        assert!(config.validate().is_ok());
     }
 
     #[test]
     fn test_config_backwards_compatibility() {
         let config = AppConfig::default();
-        
+
         // Should have pipeline available for backward compatibility
         assert!(config.pipeline.is_some());
-        
+
         // Test helper methods
         let pipeline = config.get_pipeline();
         assert_eq!(pipeline.video_source, config.input.source);
         assert_eq!(pipeline.display_enabled, config.output.display_enabled);
-        
+
         // Test video source getter
         assert_eq!(config.video_source(), config.input.source);
         assert_eq!(config.input_source(), config.input.source);
@@ -418,13 +421,13 @@ mod configuration_validation_tests {
     #[test]
     fn test_config_convenience_methods() {
         let config = AppConfig::production_example();
-        
+
         // Test model path access
         assert_eq!(config.model_path(), &PathBuf::from("models/yolov8n.onnx"));
-        
+
         // Test input source access
         assert_eq!(config.input_source(), "webcam");
-        
+
         // Test preprocessing access
         let preprocessing = config.get_preprocessing();
         assert_eq!(preprocessing.target_size, [640, 640]);
@@ -440,18 +443,21 @@ mod integration_workflow_tests {
     #[test]
     fn test_error_to_metrics_integration() {
         let metrics = Metrics::new();
-        let monitor = PerformanceMonitor::new();
-        
+        let _monitor = PerformanceMonitor::new();
+
         // Simulate performance degradation
         metrics.update_fps(15.0); // Below target
         metrics.update_inference_latency(100.0); // Above target
-        
+
         // Check if performance targets fail
         let result = metrics.check_performance_targets(30.0, 50.0);
         assert!(result.is_err());
-        
+
         match result.unwrap_err() {
-            PupError::PerformanceTarget { target_fps, actual_fps } => {
+            PupError::PerformanceTarget {
+                target_fps,
+                actual_fps,
+            } => {
                 assert_eq!(target_fps, 30.0);
                 assert_eq!(actual_fps, 15.0);
             }
@@ -463,13 +469,13 @@ mod integration_workflow_tests {
     fn test_config_to_error_integration() {
         // Test invalid configuration generates appropriate errors
         let mut config = AppConfig::production_example();
-        
+
         // Set invalid model path
         config.inference.model_path = PathBuf::from("nonexistent.onnx");
-        
+
         let result = config.validate();
         assert!(result.is_err());
-        
+
         match result.unwrap_err() {
             PupError::ModelLoadError(path) => {
                 assert_eq!(path, PathBuf::from("nonexistent.onnx"));
@@ -481,31 +487,31 @@ mod integration_workflow_tests {
     #[test]
     fn test_full_production_workflow() {
         // Test a complete production workflow integration
-        
+
         // 1. Create production configuration
-        let config = AppConfig::production_example();
-        
+        let _config = AppConfig::production_example();
+
         // 2. Initialize performance monitoring
         let mut monitor = PerformanceMonitor::new();
         monitor.add_reporter(Box::new(ConsoleReporter::new(1000)));
-        
+
         // 3. Get metrics reference
         let metrics = monitor.metrics();
-        
+
         // 4. Simulate good performance
         metrics.update_fps(60.0);
         metrics.update_inference_latency(15.0);
         metrics.update_memory_usage(256);
-        
+
         // 5. Update system metrics
         assert!(monitor.update_system_metrics().is_ok());
-        
+
         // 6. Check performance targets
         assert!(monitor.check_targets(30.0, 50.0).is_ok());
-        
+
         // 7. Report metrics
         assert!(monitor.report().is_ok());
-        
+
         // 8. Verify metrics are within expected ranges
         assert!(metrics.get_fps() >= 30.0);
         assert!(metrics.get_inference_latency_ms() <= 50.0);

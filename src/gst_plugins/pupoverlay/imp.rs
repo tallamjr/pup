@@ -161,7 +161,7 @@ impl ElementImpl for PupOverlay {
                 )
                 .unwrap(),
                 gst::PadTemplate::new(
-                    "src", 
+                    "src",
                     gst::PadDirection::Src,
                     gst::PadPresence::Always,
                     &caps,
@@ -182,9 +182,12 @@ impl BaseTransformImpl for PupOverlay {
 
     fn transform_ip(&self, buf: &mut gst::BufferRef) -> Result<gst::FlowSuccess, gst::FlowError> {
         let settings = self.properties.lock().unwrap().clone();
-        
+
         // Extract video frame data
-        let info = self.obj().sink_pad().current_caps()
+        let info = self
+            .obj()
+            .sink_pad()
+            .current_caps()
             .and_then(|caps| gst_video::VideoInfo::from_caps(&caps).ok())
             .ok_or(gst::FlowError::NotSupported)?;
 
@@ -193,7 +196,7 @@ impl BaseTransformImpl for PupOverlay {
 
         // Get detections from metadata (TODO: implement custom metadata)
         let detections = self.extract_detection_meta(buf);
-        
+
         // Render overlay
         self.render_overlay(&mut frame, &detections, &settings)?;
 
@@ -207,7 +210,7 @@ impl PupOverlay {
     fn extract_detection_meta(&self, buf: &gst::BufferRef) -> Vec<Detection> {
         // Extract detections from custom GStreamer metadata
         // Look for custom metadata attached by PupInference
-        
+
         // Try to find custom tags with detection data
         if let Some(tags) = buf.meta::<gst::meta::TagsMeta>() {
             let tag_list = tags.tags();
@@ -224,7 +227,7 @@ impl PupOverlay {
                 }
             }
         }
-        
+
         // Fallback: return empty vector if no metadata found
         Vec::new()
     }
@@ -241,9 +244,9 @@ impl PupOverlay {
 
         let width = frame.info().width() as f32;
         let height = frame.info().height() as f32;
-        
-        gst::debug!(gst::CAT_RUST, obj: self.obj(), 
-                   "Rendering overlay for {} detections on {}x{} frame", 
+
+        gst::debug!(gst::CAT_RUST, obj: self.obj(),
+                   "Rendering overlay for {} detections on {}x{} frame",
                    detections.len(), width, height);
 
         // Get frame data for direct pixel manipulation
@@ -258,28 +261,40 @@ impl PupOverlay {
             let y2 = (detection.y2 * height) as usize;
 
             // Draw bounding box
-            self.draw_rectangle(frame_data, stride, x1, y1, x2, y2, settings.line_thickness as usize);
-            
+            self.draw_rectangle(
+                frame_data,
+                stride,
+                x1,
+                y1,
+                x2,
+                y2,
+                settings.line_thickness as usize,
+            );
+
             // Add text rendering for labels and confidence
             if settings.show_labels || settings.show_confidence {
                 let label = if settings.show_labels && settings.show_confidence {
-                    format!("Class {}: {:.1}%", detection.class_id, detection.score * 100.0)
+                    format!(
+                        "Class {}: {:.1}%",
+                        detection.class_id,
+                        detection.score * 100.0
+                    )
                 } else if settings.show_labels {
                     format!("Class {}", detection.class_id)
                 } else {
                     format!("{:.1}%", detection.score * 100.0)
                 };
-                
+
                 // Render simple text above bounding box
                 // Note: This is a basic implementation - more sophisticated text rendering
                 // would require a proper font rendering library
                 self.render_simple_text(
-                    frame_data, 
-                    stride, 
-                    x1, 
+                    frame_data,
+                    stride,
+                    x1,
                     y1.saturating_sub(15), // Position text above bbox
                     &label,
-                    settings.font_size as usize
+                    settings.font_size as usize,
                 );
             }
         }
@@ -289,11 +304,11 @@ impl PupOverlay {
 
     fn draw_rectangle(
         &self,
-        frame_data: &mut [u8], 
+        frame_data: &mut [u8],
         stride: usize,
-        x1: usize, 
-        y1: usize, 
-        x2: usize, 
+        x1: usize,
+        y1: usize,
+        x2: usize,
         y2: usize,
         thickness: usize,
     ) {
@@ -301,7 +316,9 @@ impl PupOverlay {
 
         // Draw horizontal lines (top and bottom)
         for t in 0..thickness {
-            if y1 + t < frame_data.len() / stride && y2.saturating_sub(t) < frame_data.len() / stride {
+            if y1 + t < frame_data.len() / stride
+                && y2.saturating_sub(t) < frame_data.len() / stride
+            {
                 self.draw_horizontal_line(frame_data, stride, x1, x2, y1 + t, r, g, b);
                 if y2 > t {
                     self.draw_horizontal_line(frame_data, stride, x1, x2, y2 - t, r, g, b);
@@ -372,35 +389,54 @@ impl PupOverlay {
     ) {
         // Simple text rendering using basic pixel drawing
         // TODO: Replace with proper font rendering library like cairo or freetype
-        
+
         let char_width = font_size.max(8);
         let char_height = font_size.max(12);
-        
+
         for (i, ch) in text.chars().enumerate() {
             let char_x = x + i * char_width;
-            
+
             // Draw a simple rectangular background for each character
             for py in y..=(y + char_height).min(frame_data.len() / stride) {
                 for px in char_x..=(char_x + char_width - 1) {
                     let pixel_start = py * stride + px * 3;
                     if pixel_start + 2 < frame_data.len() {
                         // Semi-transparent black background
-                        frame_data[pixel_start] = frame_data[pixel_start] / 2;     // R
-                        frame_data[pixel_start + 1] = frame_data[pixel_start + 1] / 2; // G  
-                        frame_data[pixel_start + 2] = frame_data[pixel_start + 2] / 2; // B
+                        frame_data[pixel_start] = frame_data[pixel_start] / 2; // R
+                        frame_data[pixel_start + 1] = frame_data[pixel_start + 1] / 2; // G
+                        frame_data[pixel_start + 2] = frame_data[pixel_start + 2] / 2;
+                        // B
                     }
                 }
             }
-            
+
             // Draw simple character representation (basic blocks for now)
             // A full implementation would use actual font data
             if ch.is_ascii_alphanumeric() {
                 let mid_x = char_x + char_width / 2;
                 let mid_y = y + char_height / 2;
-                
+
                 // Draw a simple cross pattern to represent the character
-                self.draw_horizontal_line(frame_data, stride, char_x, char_x + char_width - 1, mid_y, 255, 255, 255);
-                self.draw_vertical_line(frame_data, stride, mid_x, y, y + char_height, 255, 255, 255);
+                self.draw_horizontal_line(
+                    frame_data,
+                    stride,
+                    char_x,
+                    char_x + char_width - 1,
+                    mid_y,
+                    255,
+                    255,
+                    255,
+                );
+                self.draw_vertical_line(
+                    frame_data,
+                    stride,
+                    mid_x,
+                    y,
+                    y + char_height,
+                    255,
+                    255,
+                    255,
+                );
             }
         }
     }

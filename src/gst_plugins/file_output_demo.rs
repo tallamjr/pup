@@ -4,8 +4,8 @@
 use crate::config::AppConfig;
 use crate::inference::{InferenceBackend, OrtBackend, TaskOutput};
 use crate::preprocessing::Preprocessor;
-use crate::utils::Detection;
 use crate::utils::coco_classes::NAMES as COCO_NAMES;
+use crate::utils::Detection;
 use anyhow::Result;
 use gstreamer as gst;
 use gstreamer::prelude::*;
@@ -36,7 +36,7 @@ impl FileOutputProcessor {
         let decodebin = gst::ElementFactory::make("decodebin").build()?;
         let videoconvert1 = gst::ElementFactory::make("videoconvert").build()?;
         let videoscale = gst::ElementFactory::make("videoscale").build()?;
-        
+
         // Create capsfilter for standardized format
         let capsfilter = gst::ElementFactory::make("capsfilter")
             .property(
@@ -51,7 +51,7 @@ impl FileOutputProcessor {
 
         // Create tee to split the stream
         let tee = gst::ElementFactory::make("tee").build()?;
-        
+
         // Create inference path
         let queue1 = gst::ElementFactory::make("queue").build()?;
         let appsink = gst_app::AppSink::builder()
@@ -76,28 +76,38 @@ impl FileOutputProcessor {
         // Configure x264enc for basic encoding (remove problematic properties)
 
         // Add elements to pipeline
-        pipeline.add_many(&[
-            &filesrc, &decodebin, &videoconvert1, &videoscale, &capsfilter, &tee,
-            &queue1, appsink.upcast_ref(),
-            &queue2, &videoconvert2, &x264enc, &mp4mux, &filesink
+        pipeline.add_many([
+            &filesrc,
+            &decodebin,
+            &videoconvert1,
+            &videoscale,
+            &capsfilter,
+            &tee,
+            &queue1,
+            appsink.upcast_ref(),
+            &queue2,
+            &videoconvert2,
+            &x264enc,
+            &mp4mux,
+            &filesink,
         ])?;
 
         // Link static elements
         filesrc.link(&decodebin)?;
-        gst::Element::link_many(&[&videoconvert1, &videoscale, &capsfilter, &tee])?;
-        
+        gst::Element::link_many([&videoconvert1, &videoscale, &capsfilter, &tee])?;
+
         // Link inference path
-        gst::Element::link_many(&[&tee, &queue1, appsink.upcast_ref()])?;
-        
+        gst::Element::link_many([&tee, &queue1, appsink.upcast_ref()])?;
+
         // Link file output path
-        gst::Element::link_many(&[&tee, &queue2, &videoconvert2, &x264enc, &mp4mux, &filesink])?;
+        gst::Element::link_many([&tee, &queue2, &videoconvert2, &x264enc, &mp4mux, &filesink])?;
 
         // Setup dynamic linking for decodebin
         let videoconvert1_clone = videoconvert1.clone();
         decodebin.connect_pad_added(move |_, src_pad| {
             let caps = src_pad.current_caps().unwrap();
             let structure = caps.structure(0).unwrap();
-            
+
             if structure.name().starts_with("video/") {
                 let sink_pad = videoconvert1_clone.static_pad("sink").unwrap();
                 if src_pad.link(&sink_pad).is_err() {
@@ -109,8 +119,9 @@ impl FileOutputProcessor {
         // Setup inference backend
         let mut backend = Box::new(OrtBackend::new());
         backend.load_model(&config.inference.model_path)?;
-        
-        let inference_backend: Arc<Mutex<Box<dyn InferenceBackend>>> = Arc::new(Mutex::new(backend));
+
+        let inference_backend: Arc<Mutex<Box<dyn InferenceBackend>>> =
+            Arc::new(Mutex::new(backend));
         let preprocessor = Preprocessor::default();
         let detections = Arc::new(Mutex::new(Vec::new()));
 
@@ -118,16 +129,16 @@ impl FileOutputProcessor {
         let inference_clone = inference_backend.clone();
         let preprocessor_clone = preprocessor.clone();
         let detections_clone = detections.clone();
-        
+
         appsink.set_callbacks(
             gst_app::AppSinkCallbacks::builder()
                 .new_sample(move |appsink| {
                     if let Ok(sample) = appsink.pull_sample() {
                         if let Some(buffer) = sample.buffer() {
                             if let Some(caps) = sample.caps() {
-                                if let Ok(info) = gst_video::VideoInfo::from_caps(&caps) {
+                                if let Ok(info) = gst_video::VideoInfo::from_caps(caps) {
                                     match Self::process_sample_static(
-                                        &buffer,
+                                        buffer,
                                         &info,
                                         &inference_clone,
                                         &preprocessor_clone,
@@ -140,13 +151,13 @@ impl FileOutputProcessor {
                                                 } else {
                                                     "unknown"
                                                 };
-                                                println!("  - {}: {:.2}% at ({:.0}, {:.0}, {:.0}, {:.0})", 
+                                                println!("  - {}: {:.2}% at ({:.0}, {:.0}, {:.0}, {:.0})",
                                                     class_name,
                                                     detection.score * 100.0,
                                                     detection.x1, detection.y1,
                                                     detection.width(), detection.height());
                                             }
-                                            
+
                                             // Update shared detections
                                             if let Ok(mut detections_guard) = detections_clone.lock() {
                                                 *detections_guard = new_detections;
@@ -173,7 +184,7 @@ impl FileOutputProcessor {
 
     pub fn run(&self) -> Result<()> {
         println!("Starting file output processing...");
-        
+
         // Start playing
         self.pipeline.set_state(gst::State::Playing)?;
 
@@ -190,9 +201,16 @@ impl FileOutputProcessor {
                     break;
                 }
                 gst::MessageView::StateChanged(state_changed) => {
-                    if state_changed.src().map(|s| s == &self.pipeline).unwrap_or(false) {
-                        println!("Pipeline state changed from {:?} to {:?}", 
-                            state_changed.old(), state_changed.current());
+                    if state_changed
+                        .src()
+                        .map(|s| s == &self.pipeline)
+                        .unwrap_or(false)
+                    {
+                        println!(
+                            "Pipeline state changed from {:?} to {:?}",
+                            state_changed.old(),
+                            state_changed.current()
+                        );
                     }
                 }
                 _ => {}
@@ -211,7 +229,9 @@ impl FileOutputProcessor {
         _preprocessor: &Preprocessor,
     ) -> Result<Vec<Detection>> {
         // Map buffer for reading
-        let map = buffer.map_readable().map_err(|e| anyhow::anyhow!("Failed to map buffer: {}", e))?;
+        let map = buffer
+            .map_readable()
+            .map_err(|e| anyhow::anyhow!("Failed to map buffer: {}", e))?;
         let data = map.as_slice();
 
         // Convert RGB data to f32 tensor
@@ -248,7 +268,7 @@ impl FileOutputProcessor {
                 let chw_r_idx = y * width + x;
                 let chw_g_idx = width * height + y * width + x;
                 let chw_b_idx = 2 * width * height + y * width + x;
-                
+
                 chw_data[chw_r_idx] = tensor_data[hwc_idx];
                 chw_data[chw_g_idx] = tensor_data[hwc_idx + 1];
                 chw_data[chw_b_idx] = tensor_data[hwc_idx + 2];
@@ -267,12 +287,11 @@ impl FileOutputProcessor {
                     .filter(|d| d.score > 50.0) // Filter by confidence
                     .take(10) // Limit to top 10 detections to avoid overlay clutter
                     .collect();
-                
+
                 Ok(filtered_detections)
             }
         }
     }
-
 }
 
 pub fn run_file_output_demo(output_path: Option<&str>) -> Result<()> {
@@ -282,14 +301,14 @@ pub fn run_file_output_demo(output_path: Option<&str>) -> Result<()> {
     config.inference.model_path = "models/yolov8n.onnx".into();
 
     let output_file = output_path.unwrap_or("output_with_detections.mp4");
-    
+
     println!("Starting file output YOLO demo");
     println!("Input: {}", config.input.source);
     println!("Output: {}", output_file);
-    
+
     let processor = FileOutputProcessor::new(&config, output_file)?;
     processor.run()?;
-    
+
     println!("Video with detections saved to: {}", output_file);
     Ok(())
 }

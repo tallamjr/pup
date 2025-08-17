@@ -1,5 +1,5 @@
 //! PupInference GStreamer Element
-//! 
+//!
 //! Performs ML inference on video frames using ONNX Runtime
 
 use gstreamer as gst;

@@ -2,180 +2,45 @@
 //!
 //! These tests verify specific functionality and will expand as we
 //! implement the modular architecture from the roadmap.
+//!
+//! Note: Letterbox functionality is now tested in src/preprocessing/mod.rs
+//! and frame processing is tested in src/pipeline/frame_processor.rs
 
-use std::path::PathBuf;
-
-/// Test letterbox function (from current main.rs)
 #[cfg(test)]
-mod letterbox_tests {
-    use opencv::{core, imgproc, prelude::*};
-
-    fn create_test_mat(width: i32, height: i32) -> opencv::Result<core::Mat> {
-        core::Mat::new_rows_cols_with_default(
-            height,
-            width,
-            core::CV_8UC3,
-            core::Scalar::all(128.0),
-        )
-    }
-
-    fn letterbox_to_640(src: &core::Mat) -> opencv::Result<core::Mat> {
-        let src_size = src.size()?;
-        let (orig_w, orig_h) = (src_size.width, src_size.height);
-
-        let scale = if orig_w > orig_h {
-            640.0 / orig_w as f64
-        } else {
-            640.0 / orig_h as f64
-        };
-        let new_w = (orig_w as f64 * scale).round() as i32;
-        let new_h = (orig_h as f64 * scale).round() as i32;
-
-        let mat_type = src.typ();
-        let mut dst =
-            core::Mat::new_rows_cols_with_default(640, 640, mat_type, core::Scalar::all(0.0))?;
-
-        let mut resized = core::Mat::default();
-        imgproc::resize(
-            src,
-            &mut resized,
-            core::Size::new(new_w, new_h),
-            0.0,
-            0.0,
-            imgproc::INTER_LINEAR,
-        )?;
-
-        let x_offset = (640 - new_w) / 2;
-        let y_offset = (640 - new_h) / 2;
-        let roi_rect = core::Rect::new(x_offset, y_offset, new_w, new_h);
-        let mut roi = dst.roi_mut(roi_rect)?;
-        resized.copy_to(&mut roi)?;
-
-        Ok(dst)
-    }
+mod library_integration_tests {
+    use gstpup::{config::AppConfig, preprocessing::Preprocessor, utils::Detection};
 
     #[test]
-    fn test_letterbox_square_image() {
-        let src = create_test_mat(640, 640).unwrap();
-        let result = letterbox_to_640(&src).unwrap();
-
-        assert_eq!(result.size().unwrap().width, 640);
-        assert_eq!(result.size().unwrap().height, 640);
-    }
-
-    #[test]
-    fn test_letterbox_wide_image() {
-        let src = create_test_mat(1280, 720).unwrap();
-        let result = letterbox_to_640(&src).unwrap();
-
-        assert_eq!(result.size().unwrap().width, 640);
-        assert_eq!(result.size().unwrap().height, 640);
-
-        // The scaled image should be 640x360, centered vertically
-        // Check that borders are black (0,0,0)
-        let top_pixel = result.at_2d::<core::Vec3b>(0, 320).unwrap();
-        assert_eq!(top_pixel[0], 0); // Blue channel
-        assert_eq!(top_pixel[1], 0); // Green channel
-        assert_eq!(top_pixel[2], 0); // Red channel
-    }
-
-    #[test]
-    fn test_letterbox_tall_image() {
-        let src = create_test_mat(480, 800).unwrap();
-        let result = letterbox_to_640(&src).unwrap();
-
-        assert_eq!(result.size().unwrap().width, 640);
-        assert_eq!(result.size().unwrap().height, 640);
-
-        // The scaled image should be 384x640, centered horizontally
-        // Check that borders are black
-        let left_pixel = result.at_2d::<core::Vec3b>(320, 0).unwrap();
-        assert_eq!(left_pixel[0], 0);
-        assert_eq!(left_pixel[1], 0);
-        assert_eq!(left_pixel[2], 0);
-    }
-
-    #[test]
-    fn test_letterbox_small_image() {
-        let src = create_test_mat(320, 240).unwrap();
-        let result = letterbox_to_640(&src).unwrap();
-
-        assert_eq!(result.size().unwrap().width, 640);
-        assert_eq!(result.size().unwrap().height, 640);
-
-        // Small image should be upscaled while maintaining aspect ratio
-    }
-}
-
-/// Test detection data structure
-#[cfg(test)]
-mod detection_tests {
-    #[derive(Clone, Debug, PartialEq)]
-    struct Detection {
-        x1: f32,
-        y1: f32,
-        x2: f32,
-        y2: f32,
-        score: f32,
-        class_id: i32,
-    }
-
-    impl Detection {
-        fn new(x1: f32, y1: f32, x2: f32, y2: f32, score: f32, class_id: i32) -> Self {
-            Self {
-                x1,
-                y1,
-                x2,
-                y2,
-                score,
-                class_id,
-            }
-        }
-
-        fn area(&self) -> f32 {
-            (self.x2 - self.x1) * (self.y2 - self.y1)
-        }
-
-        fn center(&self) -> (f32, f32) {
-            ((self.x1 + self.x2) / 2.0, (self.y1 + self.y2) / 2.0)
-        }
-
-        fn width(&self) -> f32 {
-            self.x2 - self.x1
-        }
-
-        fn height(&self) -> f32 {
-            self.y2 - self.y1
-        }
+    fn test_preprocessor_integration() {
+        let preprocessor = Preprocessor::new(640, 640);
+        assert_eq!(preprocessor.target_size(), (640, 640));
     }
 
     #[test]
     fn test_detection_creation() {
-        let det = Detection::new(10.0, 20.0, 30.0, 40.0, 0.8, 1);
-
-        assert_eq!(det.x1, 10.0);
-        assert_eq!(det.y1, 20.0);
-        assert_eq!(det.x2, 30.0);
-        assert_eq!(det.y2, 40.0);
-        assert_eq!(det.score, 0.8);
-        assert_eq!(det.class_id, 1);
+        let detection = Detection::new(10.0, 20.0, 30.0, 40.0, 0.8, 1);
+        assert_eq!(detection.score, 0.8);
+        assert_eq!(detection.class_id, 1);
     }
 
     #[test]
-    fn test_detection_area() {
+    fn test_config_creation() {
+        let config = AppConfig::default();
+        assert_eq!(config.inference.confidence_threshold, 0.5);
+        assert_eq!(config.inference.backend, "ort");
+    }
+}
+
+/// Test actual detection data structure from library
+#[cfg(test)]
+mod detection_tests {
+    use gstpup::utils::Detection;
+
+    #[test]
+    fn test_detection_properties() {
         let det = Detection::new(0.0, 0.0, 10.0, 20.0, 0.9, 0);
         assert_eq!(det.area(), 200.0);
-    }
-
-    #[test]
-    fn test_detection_center() {
-        let det = Detection::new(0.0, 0.0, 10.0, 20.0, 0.9, 0);
         assert_eq!(det.center(), (5.0, 10.0));
-    }
-
-    #[test]
-    fn test_detection_dimensions() {
-        let det = Detection::new(5.0, 10.0, 15.0, 30.0, 0.7, 2);
         assert_eq!(det.width(), 10.0);
         assert_eq!(det.height(), 20.0);
     }
@@ -423,14 +288,14 @@ mod gstreamer_plugin_tests {
     // Mock GStreamer plugin structures for testing
     #[derive(Debug, Clone)]
     struct MockGstElement {
-        name: String,
+        _name: String,
         properties: HashMap<String, String>,
     }
 
     impl MockGstElement {
         fn new(name: &str) -> Self {
             Self {
-                name: name.to_string(),
+                _name: name.to_string(),
                 properties: HashMap::new(),
             }
         }

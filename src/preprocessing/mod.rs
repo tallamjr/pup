@@ -226,6 +226,6 @@ mod tests {
         assert_eq!(tensor.len(), 4 * 4 * 3); // width * height * channels
 
         // All values should be normalized (0.0 to 1.0)
-        assert!(tensor.iter().all(|&x| x >= 0.0 && x <= 1.0));
+        assert!(tensor.iter().all(|&x| (0.0..=1.0).contains(&x)));
     }
 }

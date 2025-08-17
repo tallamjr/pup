@@ -1,3 +1,9 @@
+//! Platform-specific application entry point and threading utilities
+//!
+//! This module provides platform-specific abstractions for running the main application,
+//! handling the differences between macOS and other platforms regarding GUI applications
+//! and OpenGL context management.
+
 /// macOS has a specific requirement that there must be a run loop running on the main thread in
 /// order to open windows and use OpenGL, and that the global NSApplication instance must be
 /// initialized.

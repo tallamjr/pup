@@ -7,7 +7,7 @@ use std::fmt;
 pub struct Detection {
     /// Left X coordinate
     pub x1: f32,
-    /// Top Y coordinate  
+    /// Top Y coordinate
     pub y1: f32,
     /// Right X coordinate
     pub x2: f32,
