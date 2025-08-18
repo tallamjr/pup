@@ -4,10 +4,12 @@ use super::{
     InferenceBackend, InferenceError, ModelPostProcessor, TaskOutput, TaskType, YoloPostProcessor,
 };
 use ort::{
-    execution_providers::CoreMLExecutionProvider,
     session::{builder::GraphOptimizationLevel, Session},
     value::Value,
 };
+
+#[cfg(target_os = "macos")]
+use ort::execution_providers::CoreMLExecutionProvider;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
@@ -62,7 +64,7 @@ impl OrtBackend {
     }
 
     /// Create an optimized session with optional CoreML execution provider and CPU fallback
-    fn create_session(model_path: &Path, use_coreml: bool) -> Result<Session, InferenceError> {
+    fn create_session(model_path: &Path, _use_coreml: bool) -> Result<Session, InferenceError> {
         let session_builder = Session::builder()
             .map_err(|e| {
                 InferenceError::OrtError(format!("Failed to create session builder: {}", e))
@@ -75,8 +77,8 @@ impl OrtBackend {
             .map_err(|e| InferenceError::OrtError(format!("Failed to set intra threads: {}", e)))?;
 
         // Try CoreML first on Apple platforms if enabled
-        #[cfg(target_vendor = "apple")]
-        if use_coreml {
+        #[cfg(target_os = "macos")]
+        if _use_coreml {
             info!("Checking CoreML availability before creating session");
 
             // Check if we can safely use CoreML by testing a simple configuration
@@ -118,7 +120,7 @@ impl OrtBackend {
     }
 
     /// Check if CoreML execution provider is available on this system
-    #[cfg(target_vendor = "apple")]
+    #[cfg(target_os = "macos")]
     fn check_coreml_availability() -> bool {
         // Check if we're running on macOS 10.15+ (required for CoreML)
         use std::process::Command;

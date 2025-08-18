@@ -18,6 +18,7 @@ where
 }
 
 #[cfg(target_os = "macos")]
+#[allow(deprecated)]
 pub fn run<T, F: FnOnce() -> T + Send + 'static>(main: F) -> T
 where
     T: Send + 'static,

@@ -16,6 +16,7 @@ use std::sync::{Arc, Mutex};
 use tracing::{debug, error, info, warn};
 
 #[cfg(target_os = "macos")]
+#[allow(deprecated)]
 mod macos_workaround {
     use cocoa::appkit::{NSApplication, NSApplicationActivationPolicyRegular};
     use cocoa::base::nil;
