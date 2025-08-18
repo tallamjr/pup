@@ -58,6 +58,10 @@ runs:
         echo "PKG_CONFIG_PATH=$(brew --prefix)/lib/pkgconfig:${PKG_CONFIG_PATH}" >> $GITHUB_ENV
         echo "DYLD_FALLBACK_LIBRARY_PATH=$(xcode-select --print-path)/usr/lib/" >> $GITHUB_ENV
 
+        # Fix for Xcode-beta linker issues
+        echo "CC=clang" >> $GITHUB_ENV
+        echo "CXX=clang++" >> $GITHUB_ENV
+
     - name: Install UV
       if: inputs.enable-python == 'true'
       uses: astral-sh/setup-uv@v5

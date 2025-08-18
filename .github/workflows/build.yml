@@ -24,6 +24,12 @@ jobs:
         with:
           os: ${{ matrix.platform }}
 
+      - name: Fix macOS linker configuration
+        if: startsWith(matrix.platform, 'macos')
+        run: |
+          # Disable the problematic -fuse-ld flag that causes issues with Xcode-beta
+          echo "RUSTFLAGS=-C link-arg=-Wl,-ld_classic" >> $GITHUB_ENV
+
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
