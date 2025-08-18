@@ -52,11 +52,15 @@ runs:
           gst-plugins-bad \
           gst-plugins-ugly \
           opencv \
-          libomp
+          libomp \
+          llvm
 
         # Set environment variables for linking
         echo "PKG_CONFIG_PATH=$(brew --prefix)/lib/pkgconfig:${PKG_CONFIG_PATH}" >> $GITHUB_ENV
         echo "DYLD_FALLBACK_LIBRARY_PATH=$(xcode-select --print-path)/usr/lib/" >> $GITHUB_ENV
+
+        # Fix for opencv-rust clang-sys to find libclang
+        echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> $GITHUB_ENV
 
         # Fix for Xcode-beta linker issues
         echo "CC=clang" >> $GITHUB_ENV
