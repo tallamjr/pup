@@ -204,3 +204,4 @@ Cargo.lock
 
 *.local.md
 **/tasks/*.md
+**/audits/*.md
