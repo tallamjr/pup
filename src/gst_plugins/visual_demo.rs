@@ -302,12 +302,6 @@ impl VisualVideoProcessor {
             }
         }
     }
-
-    // TODO: Implement overlay rendering with cairo in future enhancement
-    #[allow(dead_code)]
-    fn render_overlay_with_cairo(&self, _detections: &[Detection]) -> Result<()> {
-        unimplemented!("Cairo overlay rendering not yet implemented")
-    }
 }
 
 pub fn run_visual_demo() -> Result<()> {

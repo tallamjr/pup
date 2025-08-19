@@ -14,19 +14,13 @@ use gstreamer as gst;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 mod live_processor;
 use live_processor::LiveVideoProcessor;
 
 #[derive(Debug, Clone, ValueEnum)]
 enum ProcessingMode {
-    /// Process video and show detections in terminal only (no video window)
-    Detection,
-    /// Show video window with processing (detections shown in terminal)
-    Visual,
-    /// Basic video playback without inference (no detection processing)
-    Playback,
     /// Show live video window with real-time bounding box overlays (recommended)
     Live,
     /// Production mode with configuration-driven processing
@@ -43,12 +37,11 @@ Supports live video overlays, webcam input, and configuration-driven processing.
 EXAMPLES:
   pup --mode live --model models/yolov8n.onnx --video assets/sample.mp4
   pup --mode live --model models/yolov8n.onnx --video webcam
-  pup --mode detection --model models/yolov8n.onnx --video assets/sample.mp4
-  pup --config config.toml
+  pup --mode production --config config.toml
 
 ")]
 struct Args {
-    /// Processing mode: production (config-driven), live (video + overlays), visual (video + terminal), detection (terminal only), playback (video only)
+    /// Processing mode: production (config-driven), live (video + overlays)
     #[arg(short, long, value_enum, default_value = "production")]
     mode: ProcessingMode,
 
@@ -97,9 +90,6 @@ fn gst_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         match AppConfig::from_toml_file(&PathBuf::from(config_path)) {
             Ok(config) => match config.mode.mode_type.as_str() {
                 "live" => Some(ProcessingMode::Live),
-                "detection" => Some(ProcessingMode::Detection),
-                "visual" => Some(ProcessingMode::Visual),
-                "playback" => Some(ProcessingMode::Playback),
                 _ => Some(ProcessingMode::Production),
             },
             Err(_) => None,
@@ -113,9 +103,6 @@ fn gst_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match mode {
         ProcessingMode::Production => run_production_mode(&args),
         ProcessingMode::Live => run_live_mode(&args),
-        ProcessingMode::Visual => run_visual_mode(&args),
-        ProcessingMode::Detection => run_detection_mode(&args),
-        ProcessingMode::Playback => run_playback_mode(&args),
     }
 }
 
@@ -244,24 +231,6 @@ fn run_live_mode(args: &Args) -> Result<(), Box<dyn std::error::Error + Send + S
 
     let processor = LiveVideoProcessor::new(&model_path, &video_source, args)?;
     processor.run()
-}
-
-fn run_visual_mode(_args: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    info!("Starting visual mode with detection output...");
-    warn!("Visual mode not fully implemented yet. Use --mode live for overlay functionality.");
-    Ok(())
-}
-
-fn run_detection_mode(_args: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    info!("Starting detection-only mode...");
-    warn!("Detection mode not fully implemented yet. Use --mode live for overlay functionality.");
-    Ok(())
-}
-
-fn run_playback_mode(_args: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    info!("Starting playback mode (no inference)...");
-    warn!("Playback mode not fully implemented yet. Use --mode live for overlay functionality.");
-    Ok(())
 }
 
 fn main() {

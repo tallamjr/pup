@@ -10,8 +10,19 @@ use gstreamer_video as gst_video;
 use gstreamer_video::subclass::prelude::*;
 use gstreamer_video::VideoFrameExt;
 use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 
 use crate::utils::detection::Detection;
+
+#[derive(Debug, Serialize, Deserialize)]
+struct DetectionJson {
+    class_id: u32,
+    score: f32,
+    x1: f32,
+    y1: f32,
+    x2: f32,
+    y2: f32,
+}
 
 #[derive(Debug, Clone)]
 struct Settings {
@@ -220,8 +231,41 @@ impl PupOverlay {
                         // Parse the detection metadata
                         if let Some(structure_str) = comment_str.strip_prefix("pup-detections: ") {
                             gst::debug!(CAT, obj: self.obj(), "Found detection metadata: {}", structure_str);
-                            // TODO: Implement full JSON parsing of detection metadata
-                            return Vec::new();
+
+                            // Extract JSON from GStreamer structure format
+                            if let Some(data_start) = structure_str.find("data=") {
+                                let data_part = &structure_str[data_start + 5..];
+                                if let Some(json_end) = data_part.rfind(';') {
+                                    let json_str = &data_part[..json_end].trim_matches('"');
+
+                                    match serde_json::from_str::<Vec<DetectionJson>>(json_str) {
+                                        Ok(json_detections) => {
+                                            let detections = json_detections
+                                                .into_iter()
+                                                .map(|d| {
+                                                    Detection::new(
+                                                        d.x1,
+                                                        d.y1,
+                                                        d.x2,
+                                                        d.y2,
+                                                        d.score,
+                                                        d.class_id as i32,
+                                                    )
+                                                })
+                                                .collect();
+                                            gst::debug!(CAT, obj: self.obj(), "Successfully parsed {} detections", detections.len());
+                                            return detections;
+                                        }
+                                        Err(e) => {
+                                            gst::warning!(CAT, obj: self.obj(), "Failed to parse detection JSON: {}", e);
+                                        }
+                                    }
+                                } else {
+                                    gst::warning!(CAT, obj: self.obj(), "Malformed metadata structure: no closing semicolon found");
+                                }
+                            } else {
+                                gst::warning!(CAT, obj: self.obj(), "Malformed metadata structure: no data field found");
+                            }
                         }
                     }
                 }

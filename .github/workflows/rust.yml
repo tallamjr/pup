@@ -67,5 +67,15 @@ jobs:
       - name: Cargo build
         run: cargo build --release
 
+      - name: Check for unimplemented tests
+        run: |
+          if grep -r "unimplemented!" tests/ --include="*.rs" 2>/dev/null; then
+            echo "Error: Found unimplemented!() in test files. This creates false impression of test coverage."
+            echo "Either implement the test or remove the placeholder function entirely."
+            exit 1
+          else
+            echo "No unimplemented tests found - good!"
+          fi
+
       - name: Run tests
         run: cargo test

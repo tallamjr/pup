@@ -10,9 +10,11 @@ use gstreamer_base::subclass::prelude::*;
 use gstreamer_video as gst_video;
 use gstreamer_video::subclass::prelude::*;
 use once_cell::sync::Lazy;
+use opencv::{core, prelude::*};
 
 use crate::config::InferenceConfig;
 use crate::inference::{InferenceBackend, InferenceError, OrtBackend};
+use crate::preprocessing::Preprocessor;
 use crate::utils::detection::Detection;
 
 #[derive(Debug, Clone)]
@@ -34,10 +36,20 @@ impl Default for Settings {
     }
 }
 
-#[derive(Default)]
 pub struct PupInference {
     inference_backend: Mutex<Option<Box<dyn InferenceBackend>>>,
     properties: Mutex<Settings>,
+    preprocessor: Preprocessor,
+}
+
+impl Default for PupInference {
+    fn default() -> Self {
+        Self {
+            inference_backend: Mutex::new(None),
+            properties: Mutex::new(Settings::default()),
+            preprocessor: Preprocessor::default(),
+        }
+    }
 }
 
 #[glib::object_subclass]
@@ -235,29 +247,33 @@ impl PupInference {
     ) -> Result<Vec<Detection>, gst::FlowError> {
         // Extract frame data
         let frame_data = frame.plane_data(0).ok_or(gst::FlowError::Error)?;
-        let width = frame.info().width() as usize;
-        let height = frame.info().height() as usize;
+        let width = frame.info().width() as i32;
+        let height = frame.info().height() as i32;
 
-        // Convert frame to proper YOLO input format
-        // YOLO expects 640x640 RGB input in CHW format
-
-        // First, check if we need to resize the frame
-        let target_width = 640;
-        let target_height = 640;
-
-        let tensor_data = if width != target_width || height != target_height {
-            // Frame needs resizing - for now, use a simple approach
-            // TODO: Implement proper letterbox resizing to maintain aspect ratio
-            gst::warning!(CAT, obj: self.obj(),
-                         "Frame size {}x{} doesn't match model input {}x{} - using simplified conversion",
-                         width, height, target_width, target_height);
-
-            // Use current frame size but warn about potential issues
-            self.convert_frame_to_chw_tensor(frame_data, width, height)
-        } else {
-            // Frame is already the right size
-            self.convert_frame_to_chw_tensor(frame_data, width, height)
+        // Convert GStreamer frame data to OpenCV Mat
+        let src_mat = unsafe {
+            core::Mat::new_rows_cols_with_data(
+                height,
+                width,
+                core::CV_8UC3,
+                frame_data.as_ptr() as *mut core::c_void,
+                core::Mat_AUTO_STEP,
+            )
+            .map_err(|e| {
+                gst::error!(CAT, obj: self.obj(), "Failed to create OpenCV Mat: {}", e);
+                gst::FlowError::Error
+            })?
         };
+
+        // Use the preprocessor to properly letterbox and convert to tensor
+        let tensor_data = self.preprocessor.process(&src_mat).map_err(|e| {
+            gst::error!(CAT, obj: self.obj(), "Preprocessing failed: {}", e);
+            gst::FlowError::Error
+        })?;
+
+        gst::debug!(CAT, obj: self.obj(),
+                   "Preprocessed frame {}x{} to 640x640 with letterboxing",
+                   width, height);
 
         // Perform inference
         let detections = backend.infer(&tensor_data).map_err(|e| {
@@ -310,40 +326,5 @@ impl PupInference {
         );
 
         gst::debug!(CAT, obj: self.obj(), "Attached {} detections as metadata", detections.len());
-    }
-
-    fn convert_frame_to_chw_tensor(
-        &self,
-        frame_data: &[u8],
-        width: usize,
-        height: usize,
-    ) -> Vec<f32> {
-        // Convert RGB frame data from HWC (Height-Width-Channels) to CHW (Channels-Height-Width) format
-        // This is the format expected by YOLO models
-
-        let total_pixels = width * height;
-        let mut chw_data = vec![0.0f32; 3 * total_pixels];
-
-        // Convert from RGB HWC to CHW format and normalize to [0, 1]
-        for y in 0..height {
-            for x in 0..width {
-                let hwc_idx = (y * width + x) * 3; // RGB pixel index in HWC format
-                let pixel_idx = y * width + x; // Pixel position
-
-                if hwc_idx + 2 < frame_data.len() {
-                    // Normalize pixel values to [0, 1] and arrange in CHW format
-                    chw_data[pixel_idx] = frame_data[hwc_idx] as f32 / 255.0; // R channel
-                    chw_data[total_pixels + pixel_idx] = frame_data[hwc_idx + 1] as f32 / 255.0; // G channel
-                    chw_data[2 * total_pixels + pixel_idx] = frame_data[hwc_idx + 2] as f32 / 255.0;
-                    // B channel
-                }
-            }
-        }
-
-        gst::debug!(CAT, obj: self.obj(),
-                   "Converted {}x{} frame to CHW tensor with {} elements",
-                   width, height, chw_data.len());
-
-        chw_data
     }
 }
