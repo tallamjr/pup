@@ -199,8 +199,14 @@ cargo check
 # Run tests with output
 cargo test -- --nocapture
 
-# Generate test coverage (if tools installed)
-cargo tarpaulin --out Html
+# Generate test coverage using cargo-llvm-cov
+cargo llvm-cov test --lib --html --output-dir target/coverage/html
+
+# Generate summary coverage report
+cargo llvm-cov test --lib --summary-only
+
+# Generate LCOV for CI/CD integration
+cargo llvm-cov test --lib --lcov --output-path target/coverage/lcov.info
 ```
 
 ## Test Data Requirements
@@ -250,4 +256,32 @@ As roadmap phases are implemented:
 - **Monitor performance**: Regular benchmark runs to catch regressions
 - **Review test coverage**: Ensure new code is adequately tested
 
-This testing framework provides comprehensive validation for both current functionality and future development, ensuring the pup video processing system remains robust and performant throughout its evolution.
+## Code Coverage
+
+The project uses `cargo-llvm-cov` for accurate code coverage reporting:
+
+### Quick Coverage Check
+```bash
+# Generate HTML coverage report
+cargo llvm-cov test --lib --html --output-dir target/coverage/html
+
+# View coverage summary
+cargo llvm-cov test --lib --summary-only
+```
+
+### Current Coverage Statistics
+- **Overall line coverage**: 42.41%
+- **Function coverage**: 53.61%
+- **Well-tested modules**: preprocessing (91%), utils/detection (89%), inference (90%)
+- **Needs improvement**: inference/ort_backend (49%), pipeline (22%), gst_plugins (0%)
+
+### Coverage Goals
+- **Immediate target**: 65% overall line coverage
+- **Medium-term goal**: 75% overall line coverage
+- **Critical modules**: 80%+ coverage for core functionality
+
+See [COVERAGE.md](./COVERAGE.md) for detailed coverage analysis, configuration, and improvement strategies.
+
+## Test Infrastructure Summary
+
+This testing framework provides comprehensive validation for both current functionality and future development, ensuring the pup video processing system remains robust and performant throughout its evolution. The combination of unit tests, integration tests, performance benchmarks, and code coverage analysis creates a solid foundation for maintaining code quality as the project evolves through its roadmap phases.

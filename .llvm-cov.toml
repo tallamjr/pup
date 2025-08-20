@@ -1,0 +1,35 @@
+# cargo-llvm-cov configuration for pup video processing project
+
+[report]
+# Output formats to generate
+html = true
+lcov = true
+text = true
+
+# Output directories
+html-dir = "target/coverage/html"
+lcov-file = "target/coverage/lcov.info"
+
+[filter]
+# Exclude test files from coverage analysis
+exclude-from-report = [
+    "tests/*",
+    "benches/*",
+    "examples/*",
+    "build.rs"
+]
+
+# Focus on core library code
+include-build-script = false
+
+[test]
+# Test configuration
+doctests = true
+no-fail-fast = true
+workspace = true
+
+# Exclude problematic test targets
+exclude-tests = [
+    "benchmark_tests",
+    "integration_tests"
+]

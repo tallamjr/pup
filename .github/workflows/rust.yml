@@ -77,5 +77,13 @@ jobs:
             echo "No unimplemented tests found - good!"
           fi
 
+      - name: Install coverage tools
+        run: cargo install cargo-llvm-cov
+
       - name: Run tests
         run: cargo test
+
+      - name: Check code coverage
+        run: |
+          chmod +x ./scripts/coverage.sh
+          ./scripts/coverage.sh check 40
