@@ -1,236 +1,228 @@
-//! Pup video processing application
+//! Unified Pup - Real-time object detection with YOLOv8 and GStreamer
 //!
-//! Real-time object detection using GStreamer and ONNX Runtime.
+//! Combines the best features from the production and demo implementations
+//! into a clean subcommand-based architecture.
 
-use clap::{Parser, ValueEnum};
-use gstpup::{
-    config::AppConfig,
-    inference::{InferenceBackend, OrtBackend},
-    pipeline::{FrameProcessor, VideoPipeline},
-    preprocessing::Preprocessor,
-    run,
-};
-use gstreamer as gst;
+use clap::{Parser, Subcommand};
+use gstpup::{config::AppConfig, run};
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Duration;
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
-mod live_processor;
-use live_processor::LiveVideoProcessor;
+mod subcommands;
+use subcommands::{OutputFormat, VideoFormat};
 
-#[derive(Debug, Clone, ValueEnum)]
-enum ProcessingMode {
-    /// Show live video window with real-time bounding box overlays (recommended)
-    Live,
-    /// Production mode with configuration-driven processing
-    Production,
-}
-
-/// Command line arguments
 #[derive(Parser, Debug)]
-#[command(author, version, about)]
+#[command(name = "pup")]
+#[command(
+    version,
+    about = "Real-time object detection with YOLOv8 and GStreamer"
+)]
 #[command(long_about = "
-Real-time object detection with YOLOv8 and GStreamer video processing.
-Supports live video overlays, webcam input, and configuration-driven processing.
+High-performance video processing application for real-time object detection.
+Combines YOLOv8 ONNX models with GStreamer for efficient video processing.
 
 EXAMPLES:
-  pup --mode live --model models/yolov8n.onnx --video assets/sample.mp4
-  pup --mode live --model models/yolov8n.onnx --video webcam
-  pup --mode production --config config.toml
+  # Live webcam with overlays (recommended)
+  pup live --input webcam
 
+  # Live video file with overlays
+  pup live --input video.mp4 --model models/yolov8n.onnx
+
+  # Detection-only processing
+  pup detect --input video.mp4 --output detections.txt
+
+  # Production processing with config
+  pup process --config configs/production.toml
+
+  # Simple video playback
+  pup play --input video.mp4
+
+  # Record video with overlays
+  pup record --input webcam --output output.mp4
 ")]
 struct Args {
-    /// Processing mode: production (config-driven), live (video + overlays)
-    #[arg(short, long, value_enum, default_value = "production")]
-    mode: ProcessingMode,
+    /// Enable verbose logging
+    #[arg(short, long, global = true)]
+    verbose: bool,
 
-    /// Path to ONNX model (optional if using --config)
-    #[arg(long)]
-    model: Option<String>,
+    /// Configuration file (can override subcommand options)
+    #[arg(short, long, global = true)]
+    config: Option<PathBuf>,
 
-    /// Video source: file path, 'webcam', or auto-detection
-    #[arg(long)]
-    video: Option<String>,
+    #[command(subcommand)]
+    command: Commands,
+}
 
-    /// Confidence threshold for detections (0.0 to 1.0)
-    #[arg(long, default_value = "0.5")]
-    confidence: f32,
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Live video with real-time YOLO overlays (webcam or file)
+    Live {
+        /// Input source: file path, 'webcam', or camera device ID
+        #[arg(short, long, default_value = "webcam")]
+        input: String,
 
-    /// Whether to disable display output
-    #[arg(long)]
-    no_display: bool,
+        /// ONNX model file path
+        #[arg(short, long, default_value = "models/yolov8n.onnx")]
+        model: PathBuf,
 
-    /// Whether to show bounding box overlays (for live mode)
-    #[arg(long, default_value = "true")]
-    show_overlays: bool,
+        /// Confidence threshold (0.0-1.0)
+        #[arg(long, default_value = "0.5")]
+        confidence: f32,
 
-    /// Whether to show class labels on bounding boxes
-    #[arg(long, default_value = "true")]
-    show_labels: bool,
+        /// Disable overlay rendering
+        #[arg(long)]
+        no_overlays: bool,
 
-    /// Whether to show confidence scores on bounding boxes
-    #[arg(long, default_value = "true")]
-    show_confidence: bool,
+        /// Hide class labels on bounding boxes
+        #[arg(long)]
+        no_labels: bool,
 
-    /// Path to configuration file (optional)
-    #[arg(long)]
-    config: Option<String>,
+        /// Hide confidence scores on bounding boxes
+        #[arg(long)]
+        no_confidence: bool,
+    },
+
+    /// Detection-only processing (no video display)
+    Detect {
+        /// Input source: file path, 'webcam', or camera device ID
+        #[arg(short, long)]
+        input: String,
+
+        /// Output file for detection results
+        #[arg(short, long, default_value = "detections.txt")]
+        output: PathBuf,
+
+        /// ONNX model file path
+        #[arg(short, long, default_value = "models/yolov8n.onnx")]
+        model: PathBuf,
+
+        /// Confidence threshold (0.0-1.0)
+        #[arg(long, default_value = "0.5")]
+        confidence: f32,
+
+        /// Output format
+        #[arg(long, value_enum, default_value = "text")]
+        format: OutputFormat,
+    },
+
+    /// Production/batch processing with configuration files
+    Process {
+        /// Configuration file path (required)
+        #[arg(short, long)]
+        config: PathBuf,
+
+        /// Override input source from config
+        #[arg(long)]
+        input: Option<String>,
+
+        /// Override output settings
+        #[arg(long)]
+        no_display: bool,
+    },
+
+    /// Simple video playback without inference
+    Play {
+        /// Input source: file path, 'webcam', or camera device ID
+        #[arg(short, long)]
+        input: String,
+    },
+
+    /// Process and record video with overlays
+    Record {
+        /// Input source: file path, 'webcam', or camera device ID
+        #[arg(short, long)]
+        input: String,
+
+        /// Output video file
+        #[arg(short, long)]
+        output: PathBuf,
+
+        /// ONNX model file path
+        #[arg(short, long, default_value = "models/yolov8n.onnx")]
+        model: PathBuf,
+
+        /// Confidence threshold (0.0-1.0)
+        #[arg(long, default_value = "0.5")]
+        confidence: f32,
+
+        /// Output video format
+        #[arg(long, value_enum, default_value = "mp4")]
+        format: VideoFormat,
+
+        /// Video quality (1-10, higher = better)
+        #[arg(long, default_value = "5")]
+        quality: u8,
+    },
 }
 
 fn gst_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Parse command line arguments
-    info!("Parsing command-line arguments...");
     let args = Args::parse();
-    debug!("Parsed arguments: {:?}", args);
 
-    // Handle different modes (either from args or config)
-    let config_mode = if let Some(config_path) = &args.config {
-        // Load config to determine mode
-        match AppConfig::from_toml_file(&PathBuf::from(config_path)) {
-            Ok(config) => match config.mode.mode_type.as_str() {
-                "live" => Some(ProcessingMode::Live),
-                _ => Some(ProcessingMode::Production),
-            },
-            Err(_) => None,
-        }
+    // Setup logging based on verbosity
+    if args.verbose {
+        std::env::set_var("RUST_LOG", "debug");
+    } else if std::env::var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", "info");
+    }
+
+    // Load global config if provided
+    let global_config = if let Some(config_path) = &args.config {
+        info!(
+            "Loading global configuration from: {}",
+            config_path.display()
+        );
+        Some(AppConfig::from_toml_file(config_path)?)
     } else {
         None
     };
 
-    let mode = config_mode.unwrap_or(args.mode.clone());
-
-    match mode {
-        ProcessingMode::Production => run_production_mode(&args),
-        ProcessingMode::Live => run_live_mode(&args),
+    match args.command {
+        Commands::Live {
+            input,
+            model,
+            confidence,
+            no_overlays,
+            no_labels,
+            no_confidence,
+        } => subcommands::live::run(
+            input,
+            model,
+            confidence,
+            !no_overlays,
+            !no_labels,
+            !no_confidence,
+            global_config,
+        ),
+        Commands::Detect {
+            input,
+            output,
+            model,
+            confidence,
+            format,
+        } => subcommands::detect::run(input, output, model, confidence, format, global_config),
+        Commands::Process {
+            config,
+            input,
+            no_display,
+        } => subcommands::process::run(config, input, !no_display, global_config),
+        Commands::Play { input } => subcommands::play::run(input, global_config),
+        Commands::Record {
+            input,
+            output,
+            model,
+            confidence,
+            format,
+            quality,
+        } => subcommands::record::run(
+            input,
+            output,
+            model,
+            confidence,
+            format,
+            quality,
+            global_config,
+        ),
     }
-}
-
-fn run_production_mode(args: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Load or create configuration
-    let config = if let Some(config_path) = &args.config {
-        info!("Loading configuration from: {}", config_path);
-        AppConfig::from_toml_file(&PathBuf::from(config_path))?
-    } else {
-        // Create config from command line arguments
-        if args.model.is_none() {
-            return Err("--model is required when not using --config".into());
-        }
-        let mut config = AppConfig::from_args(args.model.clone(), args.video.clone());
-        config.inference.confidence_threshold = args.confidence;
-        config.output.display_enabled = !args.no_display;
-        config
-    };
-
-    // Validate configuration
-    info!("Validating configuration...");
-    config.validate()?;
-
-    // Check if model file exists
-    if !config.model_exists() {
-        error!(
-            "ONNX model file '{}' not found",
-            config.model_path().display()
-        );
-        return Err("Model file not found.".into());
-    }
-
-    // Check if video file exists (for file sources)
-    if !config.video_exists()
-        && config.video_source() != "auto"
-        && config.video_source() != "webcam"
-    {
-        error!("Video file '{}' not found", config.video_source());
-        return Err("Video file not found.".into());
-    }
-
-    info!("Configuration validated successfully");
-
-    // Initialize inference backend
-    info!("Loading ONNX model from: {}", config.model_path().display());
-    let mut inference_backend = OrtBackend::new();
-    inference_backend.load_model(config.model_path())?;
-    inference_backend.set_confidence_threshold(config.inference.confidence_threshold);
-    info!("ONNX model loaded successfully");
-
-    // Initialize preprocessor
-    let preprocessing_config = config
-        .preprocessing
-        .as_ref()
-        .ok_or("Preprocessing configuration is required")?;
-    let target_size = preprocessing_config.target_size;
-    let preprocessor = Preprocessor::new(target_size[0] as i32, target_size[1] as i32);
-    info!(
-        "Preprocessor initialized with target size: {}x{}",
-        target_size[0], target_size[1]
-    );
-
-    // Create frame processor
-    let frame_processor = FrameProcessor::new(preprocessor, Box::new(inference_backend));
-    let frame_processor = Arc::new(frame_processor);
-
-    // Create and configure video pipeline
-    info!("Setting up GStreamer pipeline...");
-    let mut pipeline = VideoPipeline::new(&config)?;
-    info!("GStreamer pipeline created successfully");
-
-    // Set up frame processing callback
-    let frame_processor_clone = Arc::clone(&frame_processor);
-    pipeline
-        .set_frame_processor(move |frame, info| frame_processor_clone.process_frame(frame, info))?;
-
-    // Start the pipeline
-    info!("Starting the pipeline...");
-    pipeline.start()?;
-
-    // Main processing loop
-    info!("Processing video... Press Ctrl+C to stop");
-    loop {
-        // Process pipeline messages with a timeout
-        let continue_processing = pipeline.process_messages(Some(Duration::from_millis(100)))?;
-
-        if !continue_processing {
-            info!("Pipeline finished or encountered an error");
-            break;
-        }
-
-        // Check if pipeline is still running
-        if !pipeline.is_running() {
-            info!("Pipeline stopped");
-            break;
-        }
-    }
-
-    // Stop the pipeline
-    info!("Stopping pipeline...");
-    pipeline.stop()?;
-    info!("Pipeline stopped successfully");
-
-    Ok(())
-}
-
-fn run_live_mode(args: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    info!("Starting live video mode with YOLO inference overlays...");
-
-    // Load configuration (either from file or args)
-    let (model_path, video_source) = if let Some(config_path) = &args.config {
-        let config = AppConfig::from_toml_file(&PathBuf::from(config_path))?;
-        (config.model_path().clone(), config.input.source.clone())
-    } else {
-        let model_path = args
-            .model
-            .as_ref()
-            .ok_or("--model is required for live mode when not using --config")?;
-        let model_path = PathBuf::from(model_path);
-        let video_source = args.video.as_deref().unwrap_or("webcam").to_string();
-        (model_path, video_source)
-    };
-
-    // Initialize GStreamer
-    gst::init()?;
-
-    let processor = LiveVideoProcessor::new(&model_path, &video_source, args)?;
-    processor.run()
 }
 
 fn main() {
@@ -246,7 +238,7 @@ fn main() {
         .with_line_number(true)
         .init();
 
-    // Use the platform-specific run function from common module
+    // Use platform-specific run function
     let result = run(gst_main);
 
     match result {
