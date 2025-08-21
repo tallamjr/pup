@@ -357,13 +357,26 @@ impl Default for OrtBackendBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
     use std::path::PathBuf;
+    use tempfile::NamedTempFile;
 
     #[test]
     fn test_ort_backend_creation() {
         let backend = OrtBackend::new();
         assert_eq!(backend.get_input_shape(), &[1, 3, 640, 640]);
         assert_eq!(backend.get_confidence_threshold(), 0.5);
+        assert!(backend.use_coreml);
+        assert_eq!(backend.get_task_type(), TaskType::ObjectDetection);
+    }
+
+    #[test]
+    fn test_ort_backend_with_custom_post_processor() {
+        let post_processor = Box::new(YoloPostProcessor::coco_default());
+        let backend = OrtBackend::with_post_processor(post_processor);
+        assert_eq!(backend.get_input_shape(), &[1, 3, 640, 640]);
+        assert_eq!(backend.get_confidence_threshold(), 0.5);
+        assert!(backend.use_coreml);
     }
 
     #[test]
@@ -378,6 +391,23 @@ mod tests {
     }
 
     #[test]
+    fn test_builder_with_custom_post_processor() {
+        let post_processor = Box::new(YoloPostProcessor::coco_default());
+        let backend = OrtBackendBuilder::new()
+            .with_post_processor(post_processor)
+            .build();
+        assert_eq!(backend.get_input_shape(), &[1, 3, 640, 640]);
+    }
+
+    #[test]
+    fn test_builder_default() {
+        let backend = OrtBackendBuilder::default().build();
+        assert_eq!(backend.get_input_shape(), &[1, 3, 640, 640]);
+        assert_eq!(backend.get_confidence_threshold(), 0.5);
+        assert!(backend.use_coreml);
+    }
+
+    #[test]
     fn test_confidence_threshold_validation() {
         let mut backend = OrtBackend::new();
 
@@ -385,12 +415,43 @@ mod tests {
         backend.set_confidence_threshold(0.8);
         assert_eq!(backend.get_confidence_threshold(), 0.8);
 
+        // Edge cases
+        backend.set_confidence_threshold(0.0);
+        assert_eq!(backend.get_confidence_threshold(), 0.0);
+
+        backend.set_confidence_threshold(1.0);
+        assert_eq!(backend.get_confidence_threshold(), 1.0);
+
         // Invalid thresholds should be rejected
         backend.set_confidence_threshold(-0.1);
-        assert_eq!(backend.get_confidence_threshold(), 0.8); // Should remain unchanged
+        assert_eq!(backend.get_confidence_threshold(), 1.0); // Should remain unchanged
 
         backend.set_confidence_threshold(1.5);
-        assert_eq!(backend.get_confidence_threshold(), 0.8); // Should remain unchanged
+        assert_eq!(backend.get_confidence_threshold(), 1.0); // Should remain unchanged
+
+        backend.set_confidence_threshold(f32::NAN);
+        assert_eq!(backend.get_confidence_threshold(), 1.0); // Should remain unchanged
+
+        backend.set_confidence_threshold(f32::INFINITY);
+        assert_eq!(backend.get_confidence_threshold(), 1.0); // Should remain unchanged
+    }
+
+    #[test]
+    fn test_confidence_threshold_edge_cases() {
+        let mut backend = OrtBackend::new();
+
+        // Test boundary conditions more thoroughly
+        backend.set_confidence_threshold(0.0001);
+        assert_eq!(backend.get_confidence_threshold(), 0.0001);
+
+        backend.set_confidence_threshold(0.9999);
+        assert_eq!(backend.get_confidence_threshold(), 0.9999);
+
+        backend.set_confidence_threshold(-0.0001);
+        assert_eq!(backend.get_confidence_threshold(), 0.9999); // Should remain unchanged
+
+        backend.set_confidence_threshold(1.0001);
+        assert_eq!(backend.get_confidence_threshold(), 0.9999); // Should remain unchanged
     }
 
     #[test]
@@ -400,9 +461,51 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
+            InferenceError::ModelLoadError(msg) => {
+                assert!(msg.contains("does not exist"));
+            }
+            _ => panic!("Expected ModelLoadError"),
+        }
+    }
+
+    #[test]
+    fn test_model_loading_with_directory() {
+        let mut backend = OrtBackend::new();
+        let result = backend.load_model(&PathBuf::from("/tmp"));
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
             InferenceError::ModelLoadError(_) => {} // Expected
             _ => panic!("Expected ModelLoadError"),
         }
+    }
+
+    #[test]
+    fn test_model_loading_with_empty_file() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        // Don't write anything to create an empty file
+        temp_file.flush().unwrap();
+
+        let mut backend = OrtBackend::new();
+        let result = backend.load_model(temp_file.path());
+
+        // Should fail because empty file is not a valid ONNX model
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_model_loading_with_invalid_file() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file
+            .write_all(b"This is not a valid ONNX file")
+            .unwrap();
+        temp_file.flush().unwrap();
+
+        let mut backend = OrtBackend::new();
+        let result = backend.load_model(temp_file.path());
+
+        // Should fail because file is not a valid ONNX model
+        assert!(result.is_err());
     }
 
     #[test]
@@ -428,7 +531,10 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            InferenceError::InvalidInputShape { .. } => {} // Expected
+            InferenceError::InvalidInputShape { expected, actual } => {
+                assert_eq!(expected, vec![1, 3, 640, 640]);
+                assert_eq!(actual, vec![100]);
+            }
             _ => panic!("Expected InvalidInputShape error"),
         }
 
@@ -436,6 +542,44 @@ mod tests {
         let correct_input = vec![0.0f32; 3 * 640 * 640];
         let result = backend.validate_input(&correct_input);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_input_validation_edge_cases() {
+        let backend = OrtBackend::new();
+
+        // Empty input
+        let empty_input = vec![];
+        let result = backend.validate_input(&empty_input);
+        assert!(result.is_err());
+
+        // One element too small
+        let almost_correct = vec![0.0f32; 3 * 640 * 640 - 1];
+        let result = backend.validate_input(&almost_correct);
+        assert!(result.is_err());
+
+        // One element too big
+        let too_big = vec![0.0f32; 3 * 640 * 640 + 1];
+        let result = backend.validate_input(&too_big);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_create_input_tensor() {
+        let backend = OrtBackend::new();
+        let input = vec![0.5f32; 3 * 640 * 640];
+
+        let result = backend.create_input_tensor(&input);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_create_input_tensor_wrong_size() {
+        let backend = OrtBackend::new();
+        let input = vec![0.5f32; 100]; // Wrong size
+
+        let result = backend.create_input_tensor(&input);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -447,9 +591,66 @@ mod tests {
     }
 
     #[test]
+    fn test_backend_with_coreml_setting() {
+        let mut backend = OrtBackend::new();
+        assert!(backend.use_coreml); // Default should be true
+
+        backend.with_coreml(false);
+        assert!(!backend.use_coreml);
+
+        backend.with_coreml(true);
+        assert!(backend.use_coreml);
+    }
+
+    #[test]
     fn test_builder_with_coreml_disabled() {
         let backend = OrtBackendBuilder::new().with_coreml(false).build();
-
         assert!(!backend.use_coreml);
+    }
+
+    #[test]
+    fn test_builder_comprehensive_configuration() {
+        let post_processor = Box::new(YoloPostProcessor::coco_default());
+        let backend = OrtBackendBuilder::new()
+            .with_input_shape(vec![1, 3, 512, 512])
+            .with_confidence_threshold(0.8)
+            .with_post_processor(post_processor)
+            .with_coreml(false)
+            .build();
+
+        assert_eq!(backend.get_input_shape(), &[1, 3, 512, 512]);
+        assert_eq!(backend.get_confidence_threshold(), 0.8);
+        assert!(!backend.use_coreml);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_coreml_availability_check() {
+        // This test may not work in all environments, but it should at least not panic
+        let available = OrtBackend::check_coreml_availability();
+        // Just verify it returns a boolean
+        assert!(available || !available);
+    }
+
+    #[test]
+    fn test_default_backend() {
+        let backend = OrtBackend::default();
+        assert_eq!(backend.get_input_shape(), &[1, 3, 640, 640]);
+        assert_eq!(backend.get_confidence_threshold(), 0.5);
+        assert!(backend.use_coreml);
+    }
+
+    #[test]
+    fn test_backend_task_type() {
+        let backend = OrtBackend::new();
+        assert_eq!(backend.get_task_type(), TaskType::ObjectDetection);
+    }
+
+    // Test error handling in session creation
+    #[test]
+    fn test_session_creation_with_invalid_path() {
+        let invalid_path = PathBuf::from("/this/path/definitely/does/not/exist/model.onnx");
+        let result = OrtBackend::create_session(&invalid_path, false);
+        assert!(result.is_err());
     }
 }

@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 /// Main error type for the Pup video processing system
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum PupError {
     // Input source errors
     #[error("Input source not available: {0}")]

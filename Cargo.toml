@@ -48,8 +48,10 @@ system-deps = "7"
 
 [dev-dependencies]
 tempfile = "3.8"
+rand = "0.8"
+tokio = { version = "1.0", features = ["full", "macros", "rt"] }
+futures = "0.3"
 criterion = { version = "0.5", features = ["html_reports"] }
-tokio = { version = "1.0", features = ["macros", "rt"] }
 
 [build-dependencies]
 cc = "1.0"
