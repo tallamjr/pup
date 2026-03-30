@@ -7,7 +7,6 @@
 //! - Pup's structured error handling
 
 use anyhow;
-use gstpup::config::AppConfig;
 use gstpup::inference::{InferenceBackend, OrtBackend, TaskOutput};
 use gstpup::utils::{coco_classes::NAMES as COCO_NAMES, Detection};
 use gstreamer as gst;
@@ -712,7 +711,6 @@ pub fn run(
     show_overlays: bool,
     show_labels: bool,
     show_confidence: bool,
-    _global_config: Option<AppConfig>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Use demo's macOS workaround for better video display
     macos_workaround::run(move || {
