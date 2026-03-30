@@ -1,22 +1,14 @@
-//! Comprehensive test utilities and fixtures for the Pup testing framework
+//! Test utilities and fixtures for the Pup testing framework
 //!
-//! This module provides shared testing infrastructure including mock objects,
-//! test fixtures, custom assertions, and utilities for comprehensive edge case testing.
+//! This module provides shared testing infrastructure including
+//! test fixtures, custom assertions, and property-based test generators.
 
-use gstpup::config::{AppConfig, InferenceConfig, InputConfig, OutputConfig, PreprocessingConfig};
-use gstpup::error::{PupError, PupResult};
-use std::fs;
-use std::io::Write;
-use std::os::unix::process::ExitStatusExt;
+use gstpup::config::{AppConfig, PreprocessingConfig};
 use std::path::PathBuf;
-use std::sync::Arc;
-use tempfile::{NamedTempFile, TempDir};
 
 pub mod assertions;
 pub mod fixtures;
 pub mod generators;
-pub mod mocks;
-pub mod stress;
 
 // Re-export key types for convenience
 pub use fixtures::ConfigFixtures;
@@ -120,232 +112,6 @@ impl TestConfigBuilder {
     pub fn build(self) -> AppConfig {
         self.config
     }
-}
-
-/// Test file generator for creating temporary test files
-pub struct TestFileGenerator {
-    temp_dir: TempDir,
-}
-
-impl TestFileGenerator {
-    pub fn new() -> std::result::Result<Self, Box<dyn std::error::Error>> {
-        Ok(Self {
-            temp_dir: TempDir::new()?,
-        })
-    }
-
-    /// Create a temporary TOML config file with given content
-    pub fn create_toml_file(
-        &self,
-        content: &str,
-    ) -> std::result::Result<PathBuf, Box<dyn std::error::Error>> {
-        let file_path = self.temp_dir.path().join("test_config.toml");
-        fs::write(&file_path, content)?;
-        Ok(file_path)
-    }
-
-    /// Create an invalid TOML file
-    pub fn create_invalid_toml(&self) -> std::result::Result<PathBuf, Box<dyn std::error::Error>> {
-        let content = r#"
-            [mode
-            type = "production"  # Missing closing bracket
-
-            [input]
-            source = "webcam"
-            device_id = "invalid_number"  # Should be number, not string
-        "#;
-        self.create_toml_file(content)
-    }
-
-    /// Create a TOML file with missing required fields
-    pub fn create_incomplete_toml(
-        &self,
-    ) -> std::result::Result<PathBuf, Box<dyn std::error::Error>> {
-        let content = r#"
-            [mode]
-            type = "production"
-
-            # Missing inference section entirely
-            [input]
-            source = "webcam"
-        "#;
-        self.create_toml_file(content)
-    }
-
-    /// Create a temporary mock ONNX model file
-    pub fn create_mock_onnx_file(
-        &self,
-    ) -> std::result::Result<PathBuf, Box<dyn std::error::Error>> {
-        let file_path = self.temp_dir.path().join("mock_model.onnx");
-        fs::write(&file_path, b"mock onnx content")?;
-        Ok(file_path)
-    }
-
-    /// Create a temporary video file
-    pub fn create_mock_video_file(
-        &self,
-    ) -> std::result::Result<PathBuf, Box<dyn std::error::Error>> {
-        let file_path = self.temp_dir.path().join("mock_video.mp4");
-        fs::write(&file_path, b"mock video content")?;
-        Ok(file_path)
-    }
-
-    /// Create a file with invalid extension
-    pub fn create_invalid_model_file(
-        &self,
-    ) -> std::result::Result<PathBuf, Box<dyn std::error::Error>> {
-        let file_path = self.temp_dir.path().join("invalid_model.txt");
-        fs::write(&file_path, b"not an onnx file")?;
-        Ok(file_path)
-    }
-
-    /// Get the temp directory path
-    pub fn temp_dir(&self) -> &std::path::Path {
-        self.temp_dir.path()
-    }
-}
-
-impl Default for TestFileGenerator {
-    fn default() -> Self {
-        Self::new().expect("Failed to create temp directory")
-    }
-}
-
-/// Resource constraint simulator for testing edge cases
-pub struct ResourceConstraints {
-    temp_dir: TempDir,
-}
-
-impl ResourceConstraints {
-    pub fn new() -> std::result::Result<Self, Box<dyn std::error::Error>> {
-        Ok(Self {
-            temp_dir: TempDir::new()?,
-        })
-    }
-
-    /// Create a directory without write permissions (platform-specific)
-    pub fn create_readonly_directory(
-        &self,
-    ) -> std::result::Result<PathBuf, Box<dyn std::error::Error>> {
-        let dir_path = self.temp_dir.path().join("readonly");
-        fs::create_dir(&dir_path)?;
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&dir_path)?.permissions();
-            perms.set_mode(0o444); // Read-only
-            fs::set_permissions(&dir_path, perms)?;
-        }
-
-        Ok(dir_path)
-    }
-
-    /// Create a file that simulates insufficient disk space scenario
-    pub fn create_large_file(
-        &self,
-        size_mb: usize,
-    ) -> std::result::Result<PathBuf, Box<dyn std::error::Error>> {
-        let file_path = self.temp_dir.path().join("large_file.dat");
-        let mut file = fs::File::create(&file_path)?;
-
-        // Write in chunks to avoid memory issues
-        let chunk = vec![0u8; 1024 * 1024]; // 1MB chunk
-        for _ in 0..size_mb {
-            file.write_all(&chunk)?;
-        }
-
-        Ok(file_path)
-    }
-}
-
-/// Memory leak detector for integration tests
-pub struct MemoryLeakDetector {
-    initial_memory: usize,
-}
-
-impl MemoryLeakDetector {
-    pub fn new() -> Self {
-        Self {
-            initial_memory: Self::get_current_memory(),
-        }
-    }
-
-    /// Check for memory leaks (threshold in MB)
-    pub fn check_for_leaks(&self, threshold_mb: usize) -> bool {
-        let current_memory = Self::get_current_memory();
-        let memory_increase = current_memory.saturating_sub(self.initial_memory);
-        memory_increase > threshold_mb
-    }
-
-    #[cfg(target_os = "macos")]
-    fn get_current_memory() -> usize {
-        use std::process::Command;
-
-        let output = Command::new("ps")
-            .args(["-o", "rss=", "-p", &std::process::id().to_string()])
-            .output()
-            .unwrap_or_else(|_| std::process::Output {
-                status: std::process::ExitStatus::from_raw(1),
-                stdout: b"0".to_vec(),
-                stderr: Vec::new(),
-            });
-
-        String::from_utf8_lossy(&output.stdout)
-            .trim()
-            .parse::<usize>()
-            .unwrap_or(0)
-            / 1024 // Convert KB to MB
-    }
-
-    #[cfg(target_os = "linux")]
-    fn get_current_memory() -> usize {
-        let status_file = format!("/proc/{}/status", std::process::id());
-        let content = std::fs::read_to_string(status_file).unwrap_or_default();
-
-        for line in content.lines() {
-            if line.starts_with("VmRSS:") {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 2 {
-                    return parts[1].parse::<usize>().unwrap_or(0) / 1024; // Convert KB to MB
-                }
-            }
-        }
-        0
-    }
-
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    fn get_current_memory() -> usize {
-        0 // Fallback for unsupported platforms
-    }
-}
-
-/// Concurrent test executor for testing race conditions
-pub struct ConcurrentTestExecutor;
-
-impl ConcurrentTestExecutor {
-    /// Execute multiple operations concurrently and collect results
-    pub async fn execute_concurrent<F, T>(operations: Vec<F>) -> Vec<T>
-    where
-        F: FnOnce() -> T + Send + 'static,
-        T: Send + 'static,
-    {
-        use tokio::task;
-
-        let handles: Vec<_> = operations
-            .into_iter()
-            .map(|op| task::spawn_blocking(op))
-            .collect();
-
-        let mut results = Vec::new();
-        for handle in handles {
-            if let Ok(result) = handle.await {
-                results.push(result);
-            }
-        }
-        results
-    }
-
 }
 
 /// Property-based test generator
@@ -452,19 +218,6 @@ mod tests {
     }
 
     #[test]
-    fn test_file_generator() {
-        let generator = TestFileGenerator::new().unwrap();
-
-        let toml_path = generator
-            .create_toml_file("[mode]\ntype = \"test\"")
-            .unwrap();
-        assert!(toml_path.exists());
-
-        let content = fs::read_to_string(toml_path).unwrap();
-        assert!(content.contains("test"));
-    }
-
-    #[test]
     fn test_property_generator() {
         let valid_thresholds = PropertyTestGenerator::valid_confidence_thresholds(10);
         assert_eq!(valid_thresholds.len(), 10);
@@ -473,12 +226,5 @@ mod tests {
         let invalid_thresholds = PropertyTestGenerator::invalid_confidence_thresholds(10);
         assert_eq!(invalid_thresholds.len(), 10);
         assert!(invalid_thresholds.iter().all(|&t| t < 0.0 || t > 1.0));
-    }
-
-    #[test]
-    fn test_memory_leak_detector() {
-        let detector = MemoryLeakDetector::new();
-        // Should not detect leaks immediately
-        assert!(!detector.check_for_leaks(1000));
     }
 }
