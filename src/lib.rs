@@ -9,8 +9,6 @@ pub mod inference;
 pub mod preprocessing;
 pub mod utils;
 
-pub mod gst_plugins;
-
 pub use config::{
     AppConfig, InferenceConfig, InputConfig, ModeConfig, OutputConfig, PipelineConfig,
     PreprocessingConfig,
