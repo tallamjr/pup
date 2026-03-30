@@ -2,8 +2,6 @@
 
 use gstpup::config::AppConfig;
 use gstpup::error::PupError;
-use gstpup::metrics::Metrics;
-use std::sync::Arc;
 
 /// Custom assertion for configuration validation errors
 pub fn assert_config_validation_error(result: Result<(), PupError>, expected_field: &str) {
@@ -63,65 +61,6 @@ pub fn assert_file_not_found_error(result: Result<AppConfig, PupError>, expected
     }
 }
 
-/// Assert that metrics are within expected ranges
-pub fn assert_metrics_in_range(metrics: &Metrics, min_fps: f64, max_fps: f64, max_latency_ms: f64) {
-    let fps = metrics.get_fps();
-    let latency = metrics.get_inference_latency_ms();
-
-    assert!(
-        fps >= min_fps && fps <= max_fps,
-        "FPS {} is not within range [{}, {}]",
-        fps,
-        min_fps,
-        max_fps
-    );
-
-    assert!(
-        latency <= max_latency_ms,
-        "Latency {}ms exceeds maximum allowed {}ms",
-        latency,
-        max_latency_ms
-    );
-}
-
-/// Assert that memory usage is reasonable
-pub fn assert_memory_usage_reasonable(metrics: &Metrics, max_memory_mb: usize) {
-    let memory = metrics.get_memory_usage_mb();
-    let peak_memory = metrics.get_peak_memory_mb();
-
-    assert!(
-        memory <= max_memory_mb,
-        "Memory usage {}MB exceeds maximum allowed {}MB",
-        memory,
-        max_memory_mb
-    );
-
-    assert!(
-        peak_memory >= memory,
-        "Peak memory {}MB should be >= current memory {}MB",
-        peak_memory,
-        memory
-    );
-}
-
-/// Assert that frame drop rate is acceptable
-pub fn assert_frame_drop_rate_acceptable(metrics: &Metrics, max_drop_rate_percent: f64) {
-    let drop_rate = metrics.get_frame_drop_rate();
-
-    assert!(
-        drop_rate <= max_drop_rate_percent,
-        "Frame drop rate {:.2}% exceeds maximum allowed {:.2}%",
-        drop_rate,
-        max_drop_rate_percent
-    );
-}
-
-/// Assert that performance targets are met
-pub fn assert_performance_targets_met(metrics: &Metrics, target_fps: f64, max_latency_ms: f64) {
-    let result = metrics.check_performance_targets(target_fps, max_latency_ms);
-    assert!(result.is_ok(), "Performance targets not met: {:?}", result);
-}
-
 /// Assert that an error contains specific context
 pub fn assert_error_contains_context(error: &PupError, expected_context: &str) {
     let error_message = error.to_string();
@@ -137,10 +76,12 @@ pub fn assert_error_contains_context(error: &PupError, expected_context: &str) {
 pub fn assert_model_loading_error(result: Result<AppConfig, PupError>) {
     match result {
         Err(PupError::ModelLoadError(_)) => { /* Expected */ }
-        Err(PupError::ModelFormatError(_)) => { /* Also acceptable */ }
+        Err(PupError::InvalidConfigValue { field, .. }) if field.contains("model_path") => {
+            /* Also acceptable for format errors */
+        }
         Err(other_error) => {
             panic!(
-                "Expected ModelLoadError or ModelFormatError, got: {:?}",
+                "Expected ModelLoadError or model-related InvalidConfigValue, got: {:?}",
                 other_error
             );
         }
@@ -148,26 +89,6 @@ pub fn assert_model_loading_error(result: Result<AppConfig, PupError>) {
             panic!("Expected model loading error, but validation succeeded");
         }
     }
-}
-
-/// Assert that concurrent operations complete without data corruption
-pub fn assert_concurrent_operations_safe(metrics: Arc<Metrics>, expected_total_operations: usize) {
-    let total_frames = metrics.get_total_frames();
-    let dropped_frames = metrics.get_dropped_frames();
-
-    assert!(
-        total_frames <= expected_total_operations,
-        "Total frames {} exceeds expected operations {}",
-        total_frames,
-        expected_total_operations
-    );
-
-    assert!(
-        dropped_frames <= total_frames,
-        "Dropped frames {} cannot exceed total frames {}",
-        dropped_frames,
-        total_frames
-    );
 }
 
 /// Assert that a configuration has valid defaults
@@ -231,24 +152,6 @@ pub fn assert_boundary_value_handling<T, F>(
     );
 }
 
-/// Assert that resource exhaustion is handled gracefully
-pub fn assert_resource_exhaustion_handled<F>(operation: F)
-where
-    F: FnOnce() -> Result<(), PupError>,
-{
-    match operation() {
-        Err(PupError::InsufficientMemory { .. }) => { /* Expected */ }
-        Err(PupError::InsufficientDiskSpace(_)) => { /* Expected */ }
-        Err(PupError::PermissionDenied(_)) => { /* Expected */ }
-        Err(other_error) => {
-            panic!("Expected resource exhaustion error, got: {:?}", other_error);
-        }
-        Ok(()) => {
-            panic!("Expected resource exhaustion error, but operation succeeded");
-        }
-    }
-}
-
 /// Assert that TOML serialization roundtrip preserves data
 pub fn assert_toml_roundtrip_preserves_data(original: &AppConfig) {
     let serialized = toml::to_string_pretty(original).expect("Serialization failed");
@@ -303,17 +206,6 @@ mod tests {
 
         let result = config.validate();
         assert_config_validation_error(result, "inference.confidence_threshold");
-    }
-
-    #[test]
-    fn test_metrics_assertions() {
-        let metrics = Metrics::new();
-        metrics.update_fps(30.0);
-        metrics.update_inference_latency(50.0);
-        metrics.update_memory_usage(256);
-
-        assert_metrics_in_range(&metrics, 20.0, 40.0, 100.0);
-        assert_memory_usage_reasonable(&metrics, 512);
     }
 
     #[test]

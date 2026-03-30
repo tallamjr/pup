@@ -5,7 +5,6 @@
 
 use gstpup::config::{AppConfig, InferenceConfig, InputConfig, OutputConfig, PreprocessingConfig};
 use gstpup::error::{PupError, PupResult};
-use gstpup::metrics::Metrics;
 use std::fs;
 use std::io::Write;
 use std::os::unix::process::ExitStatusExt;
@@ -347,76 +346,6 @@ impl ConcurrentTestExecutor {
         results
     }
 
-    /// Test for race conditions in metrics updates
-    pub fn test_metrics_race_conditions(metrics: Arc<Metrics>, iterations: usize) -> bool {
-        use std::sync::Barrier;
-        use std::thread;
-
-        let barrier = Arc::new(Barrier::new(4));
-        let mut handles = vec![];
-
-        // Thread 1: Update FPS
-        {
-            let metrics = metrics.clone();
-            let barrier = barrier.clone();
-            handles.push(thread::spawn(move || {
-                barrier.wait();
-                for i in 0..iterations {
-                    metrics.update_fps(i as f64);
-                }
-            }));
-        }
-
-        // Thread 2: Update memory
-        {
-            let metrics = metrics.clone();
-            let barrier = barrier.clone();
-            handles.push(thread::spawn(move || {
-                barrier.wait();
-                for i in 0..iterations {
-                    metrics.update_memory_usage(i);
-                }
-            }));
-        }
-
-        // Thread 3: Increment counters
-        {
-            let metrics = metrics.clone();
-            let barrier = barrier.clone();
-            handles.push(thread::spawn(move || {
-                barrier.wait();
-                for _ in 0..iterations {
-                    metrics.increment_total_frames();
-                    if iterations % 3 == 0 {
-                        metrics.increment_dropped_frames();
-                    }
-                }
-            }));
-        }
-
-        // Thread 4: Read metrics
-        {
-            let metrics = metrics.clone();
-            let barrier = barrier.clone();
-            handles.push(thread::spawn(move || {
-                barrier.wait();
-                for _ in 0..iterations {
-                    let _ = metrics.get_fps();
-                    let _ = metrics.get_memory_usage_mb();
-                    let _ = metrics.get_total_frames();
-                    let _ = metrics.get_dropped_frames();
-                }
-            }));
-        }
-
-        // Wait for all threads to complete
-        for handle in handles {
-            let _ = handle.join();
-        }
-
-        // Verify metrics are in consistent state
-        metrics.get_total_frames() >= metrics.get_dropped_frames()
-    }
 }
 
 /// Property-based test generator

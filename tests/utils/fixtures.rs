@@ -435,20 +435,8 @@ impl ErrorFixtures {
         PupError::InputNotAvailable("webcam not found".to_string())
     }
 
-    pub fn webcam_not_found() -> PupError {
-        PupError::WebcamNotFound { device_id: 5 }
-    }
-
     pub fn video_file_error() -> PupError {
         PupError::VideoFileError(PathBuf::from("missing_video.mp4"))
-    }
-
-    pub fn rtsp_connection_failed() -> PupError {
-        PupError::RtspConnectionFailed("rtsp://invalid.url/stream".to_string())
-    }
-
-    pub fn coreml_failure() -> PupError {
-        PupError::CoreMLFailure("provider not available".to_string())
     }
 
     pub fn model_load_error() -> PupError {
@@ -457,10 +445,6 @@ impl ErrorFixtures {
 
     pub fn inference_error() -> PupError {
         PupError::InferenceError("model execution failed".to_string())
-    }
-
-    pub fn model_format_error() -> PupError {
-        PupError::ModelFormatError(PathBuf::from("model.txt"))
     }
 
     pub fn pipeline_error() -> PupError {
@@ -482,42 +466,8 @@ impl ErrorFixtures {
         }
     }
 
-    pub fn insufficient_memory() -> PupError {
-        PupError::InsufficientMemory {
-            required_mb: 2048,
-            available_mb: 1024,
-        }
-    }
-
-    pub fn performance_target() -> PupError {
-        PupError::PerformanceTarget {
-            target_fps: 30.0,
-            actual_fps: 15.0,
-        }
-    }
-
-    pub fn processing_timeout() -> PupError {
-        PupError::ProcessingTimeout(5000)
-    }
-
-    pub fn permission_denied() -> PupError {
-        PupError::PermissionDenied(PathBuf::from("/readonly/output.mp4"))
-    }
-
-    pub fn insufficient_disk_space() -> PupError {
-        PupError::InsufficientDiskSpace(1024)
-    }
-
-    pub fn network_timeout() -> PupError {
-        PupError::NetworkTimeout("connection timed out after 30s".to_string())
-    }
-
-    pub fn macos_threading_error() -> PupError {
-        PupError::MacOSThreadingError("NSApplication not on main thread".to_string())
-    }
-
-    pub fn unsupported_platform() -> PupError {
-        PupError::UnsupportedPlatform("Windows not supported".to_string())
+    pub fn unexpected() -> PupError {
+        PupError::Unexpected("something went wrong".to_string())
     }
 }
 
@@ -610,12 +560,11 @@ mod tests {
 
     #[test]
     fn test_error_fixtures() {
-        let error = ErrorFixtures::webcam_not_found();
-        assert!(error.to_string().contains("device 5"));
+        let error = ErrorFixtures::input_not_available();
+        assert!(error.to_string().contains("webcam not found"));
 
-        let error = ErrorFixtures::performance_target();
-        assert!(error.to_string().contains("30.0"));
-        assert!(error.to_string().contains("15.0"));
+        let error = ErrorFixtures::model_load_error();
+        assert!(error.to_string().contains("invalid_model.onnx"));
     }
 
     #[test]

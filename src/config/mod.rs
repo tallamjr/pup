@@ -372,14 +372,16 @@ impl AppConfig {
         // Validate model file extension
         if let Some(extension) = self.inference.model_path.extension() {
             if extension != "onnx" {
-                return Err(PupError::ModelFormatError(
-                    self.inference.model_path.clone(),
-                ));
+                return Err(PupError::InvalidConfigValue {
+                    field: "inference.model_path".to_string(),
+                    value: format!("unsupported format: {}", self.inference.model_path.display()),
+                });
             }
         } else {
-            return Err(PupError::ModelFormatError(
-                self.inference.model_path.clone(),
-            ));
+            return Err(PupError::InvalidConfigValue {
+                field: "inference.model_path".to_string(),
+                value: format!("no file extension: {}", self.inference.model_path.display()),
+            });
         }
 
         Ok(())

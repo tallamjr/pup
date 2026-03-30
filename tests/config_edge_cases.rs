@@ -328,8 +328,10 @@ mod validation_edge_cases {
 
         let result = config.validate();
         match result {
-            Err(PupError::ModelFormatError(_)) => { /* Expected */ }
-            Err(other) => panic!("Expected ModelFormatError, got: {:?}", other),
+            Err(PupError::InvalidConfigValue { field, .. }) if field.contains("model_path") => {
+                /* Expected */
+            }
+            Err(other) => panic!("Expected InvalidConfigValue for model_path, got: {:?}", other),
             Ok(()) => panic!("Expected model format validation to fail"),
         }
 
@@ -340,8 +342,10 @@ mod validation_edge_cases {
         config.inference.model_path = no_ext_path;
         let result = config.validate();
         match result {
-            Err(PupError::ModelFormatError(_)) => { /* Expected */ }
-            Err(other) => panic!("Expected ModelFormatError, got: {:?}", other),
+            Err(PupError::InvalidConfigValue { field, .. }) if field.contains("model_path") => {
+                /* Expected */
+            }
+            Err(other) => panic!("Expected InvalidConfigValue for model_path, got: {:?}", other),
             Ok(()) => panic!("Expected model format validation to fail"),
         }
     }

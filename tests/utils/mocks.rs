@@ -1,154 +1,9 @@
 //! Mock objects for testing complex scenarios
 
 use gstpup::error::{PupError, PupResult};
-use gstpup::metrics::{Metrics, MetricsReporter};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-
-/// Mock metrics reporter for testing metrics reporting
-pub struct MockMetricsReporter {
-    name: String,
-    reports: Arc<Mutex<Vec<MetricsSnapshot>>>,
-    should_fail: bool,
-    report_count: Arc<Mutex<usize>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct MetricsSnapshot {
-    pub timestamp: Instant,
-    pub fps: f64,
-    pub inference_latency_ms: f64,
-    pub memory_usage_mb: usize,
-    pub dropped_frames: usize,
-    pub total_frames: usize,
-}
-
-impl MockMetricsReporter {
-    pub fn new(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            reports: Arc::new(Mutex::new(Vec::new())),
-            should_fail: false,
-            report_count: Arc::new(Mutex::new(0)),
-        }
-    }
-
-    pub fn with_failure(mut self) -> Self {
-        self.should_fail = true;
-        self
-    }
-
-    pub fn get_reports(&self) -> Vec<MetricsSnapshot> {
-        self.reports.lock().unwrap().clone()
-    }
-
-    pub fn get_report_count(&self) -> usize {
-        *self.report_count.lock().unwrap()
-    }
-
-    pub fn clear_reports(&self) {
-        self.reports.lock().unwrap().clear();
-        *self.report_count.lock().unwrap() = 0;
-    }
-}
-
-impl MetricsReporter for MockMetricsReporter {
-    fn report(&self, metrics: &Metrics) -> PupResult<()> {
-        *self.report_count.lock().unwrap() += 1;
-
-        if self.should_fail {
-            return Err(PupError::Unexpected("Mock reporter failure".to_string()));
-        }
-
-        let snapshot = MetricsSnapshot {
-            timestamp: Instant::now(),
-            fps: metrics.get_fps(),
-            inference_latency_ms: metrics.get_inference_latency_ms(),
-            memory_usage_mb: metrics.get_memory_usage_mb(),
-            dropped_frames: metrics.get_dropped_frames(),
-            total_frames: metrics.get_total_frames(),
-        };
-
-        self.reports.lock().unwrap().push(snapshot);
-        Ok(())
-    }
-
-    fn name(&self) -> &str {
-        &self.name
-    }
-}
-
-/// Mock system resource monitor for testing resource constraints
-pub struct MockResourceMonitor {
-    memory_usage_mb: Arc<Mutex<usize>>,
-    cpu_usage_percent: Arc<Mutex<f64>>,
-    disk_space_mb: Arc<Mutex<usize>>,
-    should_simulate_exhaustion: bool,
-}
-
-impl MockResourceMonitor {
-    pub fn new() -> Self {
-        Self {
-            memory_usage_mb: Arc::new(Mutex::new(100)), // Start with 100MB
-            cpu_usage_percent: Arc::new(Mutex::new(10.0)), // Start with 10%
-            disk_space_mb: Arc::new(Mutex::new(1024)),  // Start with 1GB
-            should_simulate_exhaustion: false,
-        }
-    }
-
-    pub fn with_resource_exhaustion(mut self) -> Self {
-        self.should_simulate_exhaustion = true;
-        self
-    }
-
-    pub fn set_memory_usage(&self, usage_mb: usize) {
-        *self.memory_usage_mb.lock().unwrap() = usage_mb;
-    }
-
-    pub fn set_cpu_usage(&self, usage_percent: f64) {
-        *self.cpu_usage_percent.lock().unwrap() = usage_percent;
-    }
-
-    pub fn set_disk_space(&self, space_mb: usize) {
-        *self.disk_space_mb.lock().unwrap() = space_mb;
-    }
-
-    pub fn get_memory_usage(&self) -> PupResult<usize> {
-        if self.should_simulate_exhaustion {
-            Err(PupError::InsufficientMemory {
-                required_mb: 2048,
-                available_mb: 512,
-            })
-        } else {
-            Ok(*self.memory_usage_mb.lock().unwrap())
-        }
-    }
-
-    pub fn get_cpu_usage(&self) -> PupResult<f64> {
-        Ok(*self.cpu_usage_percent.lock().unwrap())
-    }
-
-    pub fn get_disk_space(&self) -> PupResult<usize> {
-        if self.should_simulate_exhaustion {
-            Err(PupError::InsufficientDiskSpace(1024))
-        } else {
-            Ok(*self.disk_space_mb.lock().unwrap())
-        }
-    }
-
-    /// Simulate gradual memory increase (for leak testing)
-    pub fn simulate_memory_leak(&self, increment_mb: usize) {
-        let mut usage = self.memory_usage_mb.lock().unwrap();
-        *usage += increment_mb;
-    }
-}
-
-impl Default for MockResourceMonitor {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 /// Mock inference backend for testing inference operations
 pub struct MockInferenceBackend {
@@ -356,12 +211,18 @@ impl MockFileSystem {
 
     pub fn write_file(&self, path: &str, content: Vec<u8>) -> PupResult<()> {
         if self.should_simulate_disk_full {
-            return Err(PupError::InsufficientDiskSpace(content.len()));
+            return Err(PupError::Unexpected(format!(
+                "Disk full: cannot write {} bytes",
+                content.len()
+            )));
         }
 
         let readonly_paths = self.readonly_paths.lock().unwrap();
         if readonly_paths.contains(&path.to_string()) {
-            return Err(PupError::PermissionDenied(std::path::PathBuf::from(path)));
+            return Err(PupError::Unexpected(format!(
+                "Permission denied: {}",
+                path
+            )));
         }
 
         self.files.lock().unwrap().insert(path.to_string(), content);
@@ -427,12 +288,15 @@ impl MockNetworkClient {
 
     pub fn connect(&self, _url: &str) -> PupResult<()> {
         if !self.connection_successful {
-            return Err(PupError::RtspConnectionFailed(_url.to_string()));
+            return Err(PupError::Unexpected(format!(
+                "Connection failed: {}",
+                _url
+            )));
         }
 
         if self.should_timeout {
             std::thread::sleep(Duration::from_secs(5));
-            return Err(PupError::NetworkTimeout("Connection timeout".to_string()));
+            return Err(PupError::Unexpected("Connection timeout".to_string()));
         }
 
         // Simulate connection latency
@@ -485,20 +349,6 @@ impl Default for MockNetworkClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_mock_metrics_reporter() {
-        let reporter = MockMetricsReporter::new("test");
-        let metrics = Metrics::new();
-        metrics.update_fps(30.0);
-
-        assert!(reporter.report(&metrics).is_ok());
-        assert_eq!(reporter.get_report_count(), 1);
-
-        let reports = reporter.get_reports();
-        assert_eq!(reports.len(), 1);
-        assert_eq!(reports[0].fps, 30.0);
-    }
 
     #[test]
     fn test_mock_inference_backend() {
