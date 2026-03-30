@@ -16,8 +16,6 @@ rustflags = ["-C", "link-arg=-fuse-ld=lld"]
 rustflags = [
   "-C", "link-arg=-undefined",
   "-C", "link-arg=dynamic_lookup",
-  # Xcode 16 beta linker.
-  "-C", "link-arg=-fuse-ld=/Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld",
 ]
 
 [target.armv7-unknown-linux-gnueabihf]
