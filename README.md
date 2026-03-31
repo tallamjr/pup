@@ -1,4 +1,4 @@
-# pup
+# `pup`
 
 ![ci](https://github.com/tallamjr/pup/actions/workflows/rust.yml/badge.svg)
 
@@ -6,6 +6,7 @@
 
 - [About](#about)
   - [Why Rust?](#why-rust)
+- [Architecture](#architecture)
 - [Usage](#usage)
 - [Model Requirements](#model-requirements)
 - [Memory Footprint](#memory-footprint)
@@ -33,6 +34,72 @@ inference.
    statically typed, memory safe language gives the programmer confidence in how
    memory is being used -- essential for resource-constrained deployment
    settings.
+
+## Architecture
+
+`pup` combines two core libraries into a single real-time inference pipeline:
+
+**GStreamer** handles the entire video lifecycle -- capturing frames from a
+webcam or decoding them from a file, converting colour spaces, scaling, and
+rendering the final output to a display window. The pipeline uses a `tee`
+element to split the video into two parallel branches: one for display and one
+for inference. A GStreamer
+[pad probe](https://gstreamer.freedesktop.org/documentation/application-development/advanced/pipeline-manipulation.html)
+on the display branch draws bounding boxes directly into the video buffer
+before it reaches the video sink, so overlays appear with minimal latency.
+
+**ONNX Runtime** (via the [`ort`](https://docs.rs/ort) crate) runs the YOLOv8
+model. On macOS, the `ort` session is configured with the CoreML execution
+provider, which offloads inference to the Apple Neural Engine or GPU when
+available, falling back to CPU transparently. The inference path extracts raw
+RGB frame data from an `appsink`, normalises pixel values to `[0.0, 1.0]`,
+reshapes from HWC to CHW format, and feeds the resulting `[1, 3, 640, 640]`
+tensor into the ORT session. The YOLOv8 output (`[1, 84, 8400]`) is then
+post-processed with confidence filtering and non-maximum suppression to produce
+the final detection list.
+
+```
+                         ┌─────────────┐
+                         │  Video Src  │
+                         │ (webcam/file)│
+                         └──────┬──────┘
+                                │
+                         ┌──────┴──────┐
+                         │  decodebin  │
+                         │ videoconvert│
+                         │  videoscale │
+                         │ capsfilter  │
+                         │ (RGB 640x640)│
+                         └──────┬──────┘
+                                │
+                           ┌────┴────┐
+                           │   tee   │
+                           └────┬────┘
+                          ╱            ╲
+                   ┌─────┴─────┐  ┌────┴─────┐
+                   │  queue 1  │  │  queue 2  │
+                   └─────┬─────┘  └────┬─────┘
+                         │              │
+                   ┌─────┴─────┐  ┌────┴──────┐
+                   │  appsink  │  │ pad probe │
+                   │ (extract  │  │  (draw    │
+                   │  frames)  │  │ overlays) │
+                   └─────┬─────┘  └────┬──────┘
+                         │              │
+                   ┌─────┴─────┐  ┌────┴──────┐
+                   │ ORT infer │  │ videosink │
+                   │ (YOLOv8)  │  │ (display) │
+                   └─────┬─────┘  └───────────┘
+                         │
+                   ┌─────┴─────┐
+                   │ detections│──── shared via Arc<Mutex<>>
+                   └───────────┘
+```
+
+The inference branch writes its detection results into a shared
+`Arc<Mutex<Vec<Detection>>>`. The display branch's pad probe reads those
+detections on each frame and renders bounding boxes, class labels, and
+confidence scores directly into the pixel buffer before display.
 
 ## Usage
 
@@ -194,10 +261,13 @@ Cross-compiling from macOS to Linux can be fiddly. Useful resources:
 
 ## Refs
 
+- [`ort` crate documentation](https://docs.rs/ort) -- Rust bindings for ONNX Runtime
+- [ONNX Runtime execution providers](https://onnxruntime.ai/docs/execution-providers/) -- CoreML, CUDA, TensorRT, etc.
+- [GStreamer Rust bindings (`gstreamer-rs`)](https://gitlab.freedesktop.org/gstreamer/gstreamer-rs)
+- [Implementing YOLOv8 Object Detection with OpenCV in Rust Using ONNX Models](https://linzichun.com/posts/rust-opencv-onnx-yolov8-detect/)
 - [Rust platform support](https://doc.rust-lang.org/rustc/platform-support.html)
 - [Cargo Book](https://doc.rust-lang.org/cargo/index.html)
 - [Optimise for size](https://docs.rust-embedded.org/book/unsorted/speed-vs-size.html)
-- [Implementing YOLOv8 Object Detection with OpenCV in Rust Using ONNX Models](https://linzichun.com/posts/rust-opencv-onnx-yolov8-detect/)
 
 ## Licence
 
