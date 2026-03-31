@@ -38,22 +38,37 @@ fn test_application_help() {
 /// Test that the application fails gracefully with missing model
 #[test]
 fn test_missing_model_error() {
-    let output = Command::new("cargo")
+    let binary = PathBuf::from("target/release/pup");
+    if !binary.exists() {
+        // Build first if needed
+        let build = Command::new("cargo")
+            .args(&["build", "--release"])
+            .output()
+            .expect("Failed to build");
+        assert!(build.status.success(), "Release build failed");
+    }
+
+    let output = Command::new(&binary)
         .args(&[
-            "run",
-            "--release",
-            "--",
             "--model",
             "nonexistent.onnx",
-            "--video",
+            "--input",
             "assets/sample.mp4",
         ])
         .output()
         .expect("Failed to execute pup with missing model");
 
     assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("not found") || stderr.contains("Model file"));
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        combined.contains("Model loading failed") || combined.contains("does not exist"),
+        "Expected model error in output, got: {}",
+        combined.chars().take(500).collect::<String>()
+    );
 }
 
 /// Test that the application fails gracefully with missing video
@@ -71,7 +86,7 @@ fn test_missing_video_error() {
             "--",
             "--model",
             "models/yolov8n.onnx",
-            "--video",
+            "--input",
             "nonexistent.mp4",
         ])
         .output()
@@ -177,7 +192,7 @@ fn test_video_processing_pipeline() {
             "--",
             "--model",
             "models/yolov8n.onnx",
-            "--video",
+            "--input",
             "assets/sample.mp4",
         ])
         .spawn()
@@ -288,7 +303,7 @@ fn test_memory_usage_bounds() {
             "--",
             "--model",
             "models/yolov8n.onnx",
-            "--video",
+            "--input",
             "assets/sample.mp4",
         ])
         .stdout(Stdio::piped())
@@ -325,8 +340,8 @@ fn test_configuration_validation() {
     // Test that invalid arguments are rejected
     let test_cases = vec![
         vec!["--model"],                            // Missing model path
-        vec!["--video"],                            // Missing video path
-        vec!["--model", "", "--video", "test.mp4"], // Empty model path
+        vec!["--input"],                            // Missing video path
+        vec!["--model", "", "--input", "test.mp4"], // Empty model path
     ];
 
     for args in test_cases {
