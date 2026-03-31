@@ -59,42 +59,32 @@ tensor into the ORT session. The YOLOv8 output (`[1, 84, 8400]`) is then
 post-processed with confidence filtering and non-maximum suppression to produce
 the final detection list.
 
-```
-                         ┌─────────────┐
-                         │  Video Src  │
-                         │ (webcam/file)│
-                         └──────┬──────┘
-                                │
-                         ┌──────┴──────┐
-                         │  decodebin  │
-                         │ videoconvert│
-                         │  videoscale │
-                         │ capsfilter  │
-                         │ (RGB 640x640)│
-                         └──────┬──────┘
-                                │
-                           ┌────┴────┐
-                           │   tee   │
-                           └────┬────┘
-                          ╱            ╲
-                   ┌─────┴─────┐  ┌────┴─────┐
-                   │  queue 1  │  │  queue 2  │
-                   └─────┬─────┘  └────┬─────┘
-                         │              │
-                   ┌─────┴─────┐  ┌────┴──────┐
-                   │  appsink  │  │ pad probe │
-                   │ (extract  │  │  (draw    │
-                   │  frames)  │  │ overlays) │
-                   └─────┬─────┘  └────┬──────┘
-                         │              │
-                   ┌─────┴─────┐  ┌────┴──────┐
-                   │ ORT infer │  │ videosink │
-                   │ (YOLOv8)  │  │ (display) │
-                   └─────┬─────┘  └───────────┘
-                         │
-                   ┌─────┴─────┐
-                   │ detections│──── shared via Arc<Mutex<>>
-                   └───────────┘
+```mermaid
+flowchart TD
+    src["Video Source\n(webcam / file)"]
+    decode["decodebin\nvideoconvert\nvideoscale\ncapsfilter\n(RGB 640x640)"]
+    tee["tee"]
+
+    src --> decode --> tee
+
+    subgraph Inference Branch
+        q1["queue"]
+        appsink["appsink\n(extract frames)"]
+        ort["ORT inference\n(YOLOv8)"]
+        det["detections"]
+        q1 --> appsink --> ort --> det
+    end
+
+    subgraph Display Branch
+        q2["queue"]
+        probe["pad probe\n(draw overlays)"]
+        sink["videosink\n(display)"]
+        q2 --> probe --> sink
+    end
+
+    tee --> q1
+    tee --> q2
+    det -. "Arc&lt;Mutex&lt;Vec&lt;Detection&gt;&gt;&gt;" .-> probe
 ```
 
 The inference branch writes its detection results into a shared
