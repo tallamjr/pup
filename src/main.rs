@@ -9,7 +9,10 @@ mod live;
 
 #[derive(Parser, Debug)]
 #[command(name = "pup")]
-#[command(version, about = "Real-time object detection with YOLOv8 and GStreamer")]
+#[command(
+    version,
+    about = "Real-time object detection with YOLOv8 and GStreamer"
+)]
 struct Args {
     /// Input source: file path or 'webcam'
     #[arg(short, long, default_value = "webcam")]

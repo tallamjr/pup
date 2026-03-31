@@ -49,9 +49,7 @@ impl From<crate::inference::InferenceError> for PupError {
             crate::inference::InferenceError::ModelLoadError(msg) => {
                 PupError::ModelLoadError(PathBuf::from(msg))
             }
-            crate::inference::InferenceError::InferenceFailed(msg) => {
-                PupError::InferenceError(msg)
-            }
+            crate::inference::InferenceError::InferenceFailed(msg) => PupError::InferenceError(msg),
             crate::inference::InferenceError::OrtError(msg) => {
                 PupError::InferenceError(format!("ONNX Runtime error: {}", msg))
             }

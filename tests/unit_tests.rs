@@ -138,4 +138,3 @@ mod preprocessing_tests {
         assert_eq!(bgr_to_rgb, [255u8, 0u8, 0u8]);
     }
 }
-

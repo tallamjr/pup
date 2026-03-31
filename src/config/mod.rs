@@ -374,7 +374,10 @@ impl AppConfig {
             if extension != "onnx" {
                 return Err(PupError::InvalidConfigValue {
                     field: "inference.model_path".to_string(),
-                    value: format!("unsupported format: {}", self.inference.model_path.display()),
+                    value: format!(
+                        "unsupported format: {}",
+                        self.inference.model_path.display()
+                    ),
                 });
             }
         } else {

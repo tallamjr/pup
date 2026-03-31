@@ -333,9 +333,9 @@ mod validation_edge_cases {
         // all "rtsp://..." URLs do, so these pass input validation and may fail
         // later (e.g., on model path).
         let incomplete_rtsp_urls = [
-            "rtsp://",          // Incomplete
-            "rtsp:///stream",   // Missing host
-            "rtsp://example",   // Missing path
+            "rtsp://",        // Incomplete
+            "rtsp:///stream", // Missing host
+            "rtsp://example", // Missing path
         ];
 
         for url in incomplete_rtsp_urls {
@@ -383,7 +383,10 @@ mod validation_edge_cases {
             Err(PupError::InvalidConfigValue { field, .. }) if field.contains("model_path") => {
                 /* Expected */
             }
-            Err(other) => panic!("Expected InvalidConfigValue for model_path, got: {:?}", other),
+            Err(other) => panic!(
+                "Expected InvalidConfigValue for model_path, got: {:?}",
+                other
+            ),
             Ok(()) => panic!("Expected model format validation to fail"),
         }
 
@@ -397,7 +400,10 @@ mod validation_edge_cases {
             Err(PupError::InvalidConfigValue { field, .. }) if field.contains("model_path") => {
                 /* Expected */
             }
-            Err(other) => panic!("Expected InvalidConfigValue for model_path, got: {:?}", other),
+            Err(other) => panic!(
+                "Expected InvalidConfigValue for model_path, got: {:?}",
+                other
+            ),
             Ok(()) => panic!("Expected model format validation to fail"),
         }
     }

@@ -6,7 +6,6 @@
 //! - Demo's flexible pipeline architecture
 //! - Pup's structured error handling
 
-use anyhow;
 use gstpup::inference::{InferenceBackend, OrtBackend, TaskOutput};
 use gstpup::utils::{coco_classes::NAMES as COCO_NAMES, Detection};
 use gstreamer as gst;
