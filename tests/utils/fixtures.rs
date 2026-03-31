@@ -24,7 +24,7 @@ impl ConfigFixtures {
             inference: InferenceConfig {
                 backend: "ort".to_string(),
                 execution_providers: vec!["cpu".to_string()],
-                model_path: PathBuf::from("models/test.onnx"),
+                model_path: PathBuf::from("models/yolov8n.onnx"),
                 confidence_threshold: 0.5,
                 batch_size: 1,
                 device: None,
